@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --font-heading: 'Plus Jakarta Sans', sans-serif;
   --font-mono: 'Space Mono', monospace;
@@ -17,6 +19,7 @@
   --card-bg: #ffffff;
   --header-bg: #fffef2;
   --border-color: #1a1a1a;
+  color-scheme: light;
 }
 
 .dark {
@@ -30,6 +33,7 @@
   --card-bg: #161b22;
   --header-bg: #161b22;
   --border-color: #30363d;
+  color-scheme: dark;
 }
 
 body {
@@ -38,7 +42,7 @@ body {
   font-family: 'Inter', sans-serif;
   background-image: radial-gradient(var(--ink-faint) 1.5px, transparent 1.5px);
   background-size: 24px 24px;
-  transition: background-color 0.2s ease, color 0.2s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .font-heading {

@@ -5,8 +5,6 @@ import {
   Trash2, 
   X, 
   ShieldAlert, 
-  CheckCircle2, 
-  XCircle, 
   Loader2, 
   GitFork,
   ExternalLink 
@@ -33,7 +31,6 @@ export function BatchDeleteModal({
   onOpenAuthModal,
 }: BatchDeleteModalProps) {
   const [isDeleting, setIsDeleting] = useState(false);
-  const [progress, setProgress] = useState<{ current: number; total: number; repoName: string } | null>(null);
 
   if (!isOpen || repos.length === 0) return null;
 
@@ -41,16 +38,13 @@ export function BatchDeleteModal({
 
   const handleDelete = async () => {
     setIsDeleting(true);
-    setProgress({ current: 0, total: repos.length, repoName: repos[0].name });
     try {
       await onConfirmBatchDelete(repos);
       setIsDeleting(false);
-      setProgress(null);
       onClose();
     } catch (err) {
       console.error(err);
       setIsDeleting(false);
-      setProgress(null);
     }
   };
 
@@ -68,19 +62,19 @@ export function BatchDeleteModal({
           exit={{ scale: 0.95, opacity: 0, y: 10 }}
           transition={{ type: 'spring', damping: 25, stiffness: 300 }}
           onClick={(e) => e.stopPropagation()}
-          className="relative w-full max-w-lg overflow-hidden rounded-2xl bg-[#fffef2] border-3 border-[#1a1a1a] shadow-[8px_8px_0_#1a1a1a] text-[#1a1a1a]"
+          className="relative w-full max-w-lg overflow-hidden rounded-2xl bg-[#fffef2] dark:bg-[#161b22] border-3 border-[#1a1a1a] dark:border-[#30363d] shadow-[8px_8px_0_#1a1a1a] dark:shadow-[8px_8px_0_#000000] text-[#1a1a1a] dark:text-[#f0f6fc] transition"
         >
           {/* Header Bar */}
-          <div className="flex items-center justify-between px-6 py-4 border-b-3 border-[#1a1a1a] bg-[#ff6b6b]/15">
+          <div className="flex items-center justify-between px-6 py-4 border-b-3 border-[#1a1a1a] dark:border-[#30363d] bg-[#ff6b6b]/15 dark:bg-[#ff7b72]/15">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-[#ff6b6b] text-white border-2 border-[#1a1a1a] shadow-[2px_2px_0_#1a1a1a]">
+              <div className="p-2 rounded-xl bg-[#ff6b6b] text-white border-2 border-[#1a1a1a] dark:border-[#30363d] shadow-[2px_2px_0_#1a1a1a]">
                 <AlertTriangle className="w-5 h-5 stroke-[2.5]" />
               </div>
               <div>
-                <h3 className="font-heading text-lg font-extrabold text-[#1a1a1a]">
+                <h3 className="font-heading text-lg font-extrabold text-[#1a1a1a] dark:text-[#f0f6fc]">
                   Batch Delete Repositories
                 </h3>
-                <p className="text-[11px] font-space font-bold uppercase tracking-wider text-[#ff6b6b]">
+                <p className="text-[11px] font-space font-bold uppercase tracking-wider text-[#ff6b6b] dark:text-[#ff7b72]">
                   Permanent Destructive Action ({repos.length} Selected)
                 </p>
               </div>
@@ -89,7 +83,7 @@ export function BatchDeleteModal({
               <button
                 onClick={onClose}
                 aria-label="Close dialog"
-                className="p-1.5 rounded-lg border-2 border-[#1a1a1a] bg-white hover:bg-[#ffcc5c] text-[#1a1a1a] shadow-[2px_2px_0_#1a1a1a] active:translate-x-0.5 active:translate-y-0.5 transition cursor-pointer"
+                className="p-1.5 rounded-lg border-2 border-[#1a1a1a] dark:border-[#30363d] bg-white dark:bg-[#21262d] hover:bg-[#ffcc5c] dark:hover:bg-[#30363d] text-[#1a1a1a] dark:text-[#f0f6fc] shadow-[2px_2px_0_#1a1a1a] active:translate-x-0.5 active:translate-y-0.5 transition cursor-pointer"
               >
                 <X className="w-4 h-4 stroke-[2.5]" />
               </button>
@@ -98,20 +92,20 @@ export function BatchDeleteModal({
 
           <div className="p-6 space-y-4">
             {/* Warning Message Box */}
-            <div className="p-4 rounded-xl bg-white border-2 border-[#1a1a1a] shadow-[2px_2px_0_#1a1a1a] space-y-2">
-              <p className="text-xs text-[#1a1a1a] leading-relaxed font-semibold">
-                This action <strong className="text-[#ff6b6b] font-black underline uppercase">CANNOT</strong> be undone. This will permanently remove <strong className="font-space font-bold bg-[#ffcc5c]/30 px-1 py-0.5 rounded border border-[#1a1a1a]">{repos.length} selected repositories</strong> from GitHub, including all branches, commits, releases, issues, comments, and webhooks.
+            <div className="p-4 rounded-xl bg-white dark:bg-[#0d1117] border-2 border-[#1a1a1a] dark:border-[#30363d] shadow-[2px_2px_0_#1a1a1a] space-y-2">
+              <p className="text-xs text-[#1a1a1a] dark:text-[#8b949e] leading-relaxed font-semibold">
+                This action <strong className="text-[#ff6b6b] dark:text-[#ff7b72] font-black underline uppercase">CANNOT</strong> be undone. This will permanently remove <strong className="font-space font-bold bg-[#ffcc5c]/30 dark:bg-[#f0883e]/30 px-1 py-0.5 rounded border border-[#1a1a1a] dark:border-[#30363d] text-[#1a1a1a] dark:text-[#f0f6fc]">{repos.length} selected repositories</strong> from GitHub, including all branches, commits, releases, issues, comments, and webhooks.
               </p>
             </div>
 
             {/* Missing Delete Permission Warning */}
             {!hasDeleteScope && (
-              <div className="p-3.5 rounded-xl bg-[#ffcc5c]/25 border-2 border-[#1a1a1a] shadow-[2px_2px_0_#1a1a1a] space-y-1.5">
-                <div className="flex items-center gap-2 text-xs font-extrabold text-[#854d0e]">
+              <div className="p-3.5 rounded-xl bg-[#ffcc5c]/25 dark:bg-[#f0883e]/20 border-2 border-[#1a1a1a] dark:border-[#30363d] shadow-[2px_2px_0_#1a1a1a] space-y-1.5">
+                <div className="flex items-center gap-2 text-xs font-extrabold text-[#854d0e] dark:text-[#f0883e]">
                   <ShieldAlert className="w-4 h-4 shrink-0 stroke-[2.5]" />
                   <span>Missing `delete_repo` OAuth Permission</span>
                 </div>
-                <p className="text-[11px] text-[#555] font-medium leading-normal">
+                <p className="text-[11px] text-[#555] dark:text-[#8b949e] font-medium leading-normal">
                   Your current session may not have administrative permissions to delete repositories on GitHub.
                 </p>
                 {onOpenAuthModal && (
@@ -121,7 +115,7 @@ export function BatchDeleteModal({
                       onClose();
                       onOpenAuthModal();
                     }}
-                    className="mt-1 text-[11px] font-space font-bold text-[#1a1a1a] underline hover:text-[#ff6b6b] cursor-pointer"
+                    className="mt-1 text-[11px] font-space font-bold text-[#1a1a1a] dark:text-[#f0f6fc] underline hover:text-[#ff6b6b] cursor-pointer"
                   >
                     Update token / OAuth scopes &rarr;
                   </button>
@@ -131,19 +125,19 @@ export function BatchDeleteModal({
 
             {/* List of Repositories to Delete */}
             <div className="space-y-1.5">
-              <label className="block text-[#1a1a1a] font-bold text-xs">
+              <label className="block text-[#1a1a1a] dark:text-[#f0f6fc] font-bold text-xs">
                 Repositories to be deleted ({repos.length}):
               </label>
-              <div className="max-h-40 overflow-y-auto rounded-xl border-2 border-[#1a1a1a] bg-white divide-y divide-[#1a1a1a]/10 p-1">
+              <div className="max-h-40 overflow-y-auto rounded-xl border-2 border-[#1a1a1a] dark:border-[#30363d] bg-white dark:bg-[#0d1117] divide-y divide-[#1a1a1a]/10 dark:divide-white/10 p-1">
                 {repos.map((repo) => (
                   <div key={repo.id} className="flex items-center justify-between px-3 py-1.5 text-xs">
                     <div className="flex items-center gap-2 min-w-0">
                       {repo.fork ? (
-                        <GitFork className="w-3.5 h-3.5 text-[#1a1a1a] shrink-0" />
+                        <GitFork className="w-3.5 h-3.5 text-[#1a1a1a] dark:text-[#f0f6fc] shrink-0" />
                       ) : (
                         <span className="w-2 h-2 rounded-full bg-[#ff6b6b] shrink-0" />
                       )}
-                      <span className="font-space font-bold text-[#1a1a1a] truncate">
+                      <span className="font-space font-bold text-[#1a1a1a] dark:text-[#f0f6fc] truncate">
                         {repo.full_name}
                       </span>
                     </div>
@@ -151,7 +145,7 @@ export function BatchDeleteModal({
                       href={repo.html_url}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-[#666] hover:text-[#1a1a1a] shrink-0 ml-2"
+                      className="text-[#666] dark:text-[#8b949e] hover:text-[#1a1a1a] dark:hover:text-white shrink-0 ml-2"
                       title="Open on GitHub"
                     >
                       <ExternalLink className="w-3.5 h-3.5" />
@@ -163,9 +157,9 @@ export function BatchDeleteModal({
 
             {/* Progress indicator during delete */}
             {isDeleting && (
-              <div className="p-3.5 rounded-xl bg-[#fffef2] border-2 border-[#1a1a1a] shadow-[2px_2px_0_#1a1a1a] space-y-2">
+              <div className="p-3.5 rounded-xl bg-[#fffef2] dark:bg-[#0d1117] border-2 border-[#1a1a1a] dark:border-[#30363d] shadow-[2px_2px_0_#1a1a1a] space-y-2">
                 <div className="flex items-center justify-between text-xs font-bold font-space">
-                  <span className="flex items-center gap-2">
+                  <span className="flex items-center gap-2 text-[#1a1a1a] dark:text-[#f0f6fc]">
                     <Loader2 className="w-4 h-4 animate-spin text-[#ff6b6b]" />
                     Deleting repositories in batch...
                   </span>
@@ -174,12 +168,12 @@ export function BatchDeleteModal({
             )}
 
             {/* Modal Actions */}
-            <div className="flex items-center justify-end gap-3 pt-3 border-t-2 border-dashed border-[#1a1a1a]/15">
+            <div className="flex items-center justify-end gap-3 pt-3 border-t-2 border-dashed border-[#1a1a1a]/15 dark:border-white/10">
               <button
                 type="button"
                 onClick={onClose}
                 disabled={isDeleting}
-                className="px-4 py-2.5 rounded-xl bg-white hover:bg-[#fffef2] text-[#1a1a1a] font-space font-bold text-xs border-2 border-[#1a1a1a] shadow-[2px_2px_0_#1a1a1a] active:translate-x-0.5 active:translate-y-0.5 transition cursor-pointer disabled:opacity-50"
+                className="px-4 py-2.5 rounded-xl bg-white dark:bg-[#21262d] hover:bg-[#fffef2] dark:hover:bg-[#30363d] text-[#1a1a1a] dark:text-[#f0f6fc] font-space font-bold text-xs border-2 border-[#1a1a1a] dark:border-[#30363d] shadow-[2px_2px_0_#1a1a1a] active:translate-x-0.5 active:translate-y-0.5 transition cursor-pointer disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -188,7 +182,7 @@ export function BatchDeleteModal({
                 id="btn-confirm-batch-delete"
                 disabled={isDeleting}
                 onClick={handleDelete}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#ff6b6b] hover:bg-[#fa5252] disabled:opacity-50 disabled:cursor-not-allowed text-white font-space font-bold text-xs border-2 border-[#1a1a1a] shadow-[3px_3px_0_#1a1a1a] active:translate-x-0.5 active:translate-y-0.5 transition cursor-pointer"
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#ff6b6b] hover:bg-[#fa5252] disabled:opacity-50 disabled:cursor-not-allowed text-white font-space font-bold text-xs border-2 border-[#1a1a1a] dark:border-[#30363d] shadow-[3px_3px_0_#1a1a1a] active:translate-x-0.5 active:translate-y-0.5 transition cursor-pointer"
               >
                 <Trash2 className="w-4 h-4 stroke-[2.5]" />
                 <span>

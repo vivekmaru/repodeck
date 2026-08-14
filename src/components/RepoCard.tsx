@@ -42,22 +42,25 @@ export function RepoCard({
   const langColor = getLanguageColor(repo.language);
   const isInSync = forkSyncStatus?.status === 'up_to_date' || (forkSyncStatus && forkSyncStatus.behind_by === 0);
 
-  // Activity styling tags for playful design
   const activityTagStyles: Record<string, string> = {
-    active: 'bg-[#10b981]/20 text-[#065f46] border-[#10b981]',
-    warm: 'bg-[#4ecdc4]/25 text-[#115e59] border-[#4ecdc4]',
-    cool: 'bg-[#ffcc5c]/30 text-[#854d0e] border-[#ffcc5c]',
-    stale: 'bg-[#fb923c]/25 text-[#9a3412] border-[#fb923c]',
-    dormant: 'bg-[#ff6b6b]/20 text-[#9f1239] border-[#ff6b6b]',
+    active: 'bg-[#10b981]/20 text-[#065f46] dark:text-[#39d353] border-[#10b981]',
+    warm: 'bg-[#4ecdc4]/25 text-[#115e59] dark:text-[#4ecdc4] border-[#4ecdc4]',
+    cool: 'bg-[#ffcc5c]/30 text-[#854d0e] dark:text-[#f0883e] border-[#ffcc5c]',
+    stale: 'bg-[#fb923c]/25 text-[#9a3412] dark:text-[#fb923c] border-[#fb923c]',
+    dormant: 'bg-[#ff6b6b]/20 text-[#9f1239] dark:text-[#ff7b72] border-[#ff6b6b]',
   };
 
-  const activityStyle = activityTagStyles[activity.level] || 'bg-neutral-100 text-neutral-800 border-[#1a1a1a]';
+  const activityStyle = activityTagStyles[activity.level] || 'bg-neutral-100 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 border-[#1a1a1a]';
 
   return (
     <div 
       id={`repo-card-${repo.id}`}
-      className={`group bg-white border-[3px] border-[#1a1a1a] rounded-[20px] p-5 shadow-[4px_4px_0_#1a1a1a] hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[6px_6px_0_#1a1a1a] transition-all duration-150 flex flex-col justify-between ${
-        isSelected ? 'ring-4 ring-[#ffcc5c] bg-[#fffef7]' : repo.archived ? 'opacity-80 bg-neutral-50' : ''
+      className={`group bg-white dark:bg-[#161b22] border-[3px] border-[#1a1a1a] dark:border-[#30363d] rounded-[20px] p-5 shadow-[4px_4px_0_#1a1a1a] dark:shadow-[4px_4px_0_#000000] hover:-translate-x-0.5 hover:-translate-y-0.5 hover:shadow-[6px_6px_0_#1a1a1a] dark:hover:shadow-[6px_6px_0_#000000] transition-all duration-150 flex flex-col justify-between ${
+        isSelected 
+          ? 'ring-4 ring-[#ffcc5c] dark:ring-[#f0883e] bg-[#fffef7] dark:bg-[#21262d]' 
+          : repo.archived 
+          ? 'opacity-80 bg-neutral-50 dark:bg-neutral-900/40' 
+          : ''
       }`}
     >
       {/* Top Header */}
@@ -70,7 +73,7 @@ export function RepoCard({
                 checked={Boolean(isSelected)}
                 onChange={() => onToggleSelect(repo.id)}
                 aria-label={`Select repo ${repo.name}`}
-                className="mt-1 w-4 h-4 rounded border-2 border-[#1a1a1a] text-[#1a1a1a] focus:ring-0 cursor-pointer shrink-0 accent-[#1a1a1a]"
+                className="mt-1 w-4 h-4 rounded border-2 border-[#1a1a1a] dark:border-[#30363d] text-[#1a1a1a] focus:ring-0 cursor-pointer shrink-0 accent-[#1a1a1a]"
               />
             )}
 
@@ -80,7 +83,7 @@ export function RepoCard({
                   href={repo.html_url}
                   target="_blank"
                   rel="noreferrer"
-                  className="font-extrabold text-[#1a1a1a] hover:text-[#ff6b6b] text-base truncate flex items-center gap-1.5 transition"
+                  className="font-extrabold text-[#1a1a1a] dark:text-[#f0f6fc] hover:text-[#ff6b6b] dark:hover:text-[#ff7b72] text-base truncate flex items-center gap-1.5 transition"
                 >
                   <span className="truncate">{repo.name}</span>
                   <ExternalLink className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition shrink-0 stroke-[2.5]" />
@@ -89,13 +92,13 @@ export function RepoCard({
 
               {/* Fork upstream reference */}
               {repo.fork && repo.parent && (
-                <div className="text-[11px] text-[#666] font-space mt-1 flex items-center gap-1 truncate">
+                <div className="text-[11px] text-[#666] dark:text-[#8b949e] font-space mt-1 flex items-center gap-1 truncate">
                   <span>fork of:</span>
                   <a
                     href={repo.parent.html_url}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-[#1a1a1a] font-bold hover:underline truncate"
+                    className="text-[#1a1a1a] dark:text-[#f0f6fc] font-bold hover:underline truncate"
                   >
                     {repo.parent.full_name}
                   </a>
@@ -117,21 +120,21 @@ export function RepoCard({
 
         {/* Badges / Meta tags row */}
         <div className="flex items-center gap-1.5 flex-wrap mt-2.5">
-          <span className={`font-space text-[10px] font-bold uppercase px-2 py-0.5 rounded border border-[#1a1a1a] ${
+          <span className={`font-space text-[10px] font-bold uppercase px-2 py-0.5 rounded border border-[#1a1a1a] dark:border-[#30363d] ${
             repo.private 
-              ? 'bg-[#ffcc5c]/30 text-[#854d0e]' 
-              : 'bg-[#fffef2] text-[#1a1a1a]'
+              ? 'bg-[#ffcc5c]/30 text-[#854d0e] dark:text-[#f0883e]' 
+              : 'bg-[#fffef2] dark:bg-[#21262d] text-[#1a1a1a] dark:text-[#f0f6fc]'
           }`}>
             {repo.private ? 'Private' : 'Public'}
           </span>
 
           {repo.fork && (
             <>
-              <span className="font-space text-[10px] font-bold uppercase px-2 py-0.5 rounded border border-[#1a1a1a] bg-[#4ecdc4]/20 text-[#0f766e]">
+              <span className="font-space text-[10px] font-bold uppercase px-2 py-0.5 rounded border border-[#1a1a1a] dark:border-[#30363d] bg-[#4ecdc4]/20 text-[#0f766e] dark:text-[#39d353]">
                 Fork
               </span>
               {isInSync && (
-                <span className="font-space text-[10px] font-bold uppercase px-2 py-0.5 rounded border border-[#10b981] bg-[#10b981]/20 text-[#065f46] inline-flex items-center gap-0.5">
+                <span className="font-space text-[10px] font-bold uppercase px-2 py-0.5 rounded border border-[#10b981] bg-[#10b981]/20 text-[#065f46] dark:text-[#39d353] inline-flex items-center gap-0.5">
                   <Check className="w-2.5 h-2.5 stroke-[3]" />
                   In Sync
                 </span>
@@ -140,22 +143,22 @@ export function RepoCard({
           )}
 
           {repo.archived && (
-            <span className="font-space text-[10px] font-bold uppercase px-2 py-0.5 rounded border border-[#1a1a1a] bg-neutral-200 text-[#555]">
+            <span className="font-space text-[10px] font-bold uppercase px-2 py-0.5 rounded border border-[#1a1a1a] dark:border-[#30363d] bg-neutral-200 dark:bg-neutral-800 text-[#555] dark:text-neutral-400">
               Archived
             </span>
           )}
 
           {repo.language && (
-            <span className="font-space text-[10px] font-bold uppercase px-2 py-0.5 rounded border border-[#1a1a1a] bg-white text-[#1a1a1a] flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full border border-black/40" style={{ backgroundColor: langColor }} />
+            <span className="font-space text-[10px] font-bold uppercase px-2 py-0.5 rounded border border-[#1a1a1a] dark:border-[#30363d] bg-white dark:bg-[#21262d] text-[#1a1a1a] dark:text-[#f0f6fc] flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full border border-black/40 dark:border-white/30" style={{ backgroundColor: langColor }} />
               <span>{repo.language}</span>
             </span>
           )}
         </div>
 
         {/* Description */}
-        <p className="text-xs text-[#555] mt-2.5 line-clamp-2 min-h-[2rem] leading-relaxed font-normal">
-          {repo.description || <span className="italic text-[#999]">No description provided</span>}
+        <p className="text-xs text-[#555] dark:text-[#8b949e] mt-2.5 line-clamp-2 min-h-[2rem] leading-relaxed font-normal">
+          {repo.description || <span className="italic text-[#999] dark:text-[#666]">No description provided</span>}
         </p>
 
         {/* Topics */}
@@ -164,13 +167,13 @@ export function RepoCard({
             {repo.topics.slice(0, 3).map((topic) => (
               <span 
                 key={topic} 
-                className="text-[10px] font-space font-semibold px-2 py-0.5 bg-[#fffef2] text-[#1a1a1a] border border-[#1a1a1a]/60 rounded-md"
+                className="text-[10px] font-space font-semibold px-2 py-0.5 bg-[#fffef2] dark:bg-[#21262d] text-[#1a1a1a] dark:text-[#f0f6fc] border border-[#1a1a1a]/60 dark:border-[#30363d] rounded-md"
               >
                 #{topic}
               </span>
             ))}
             {repo.topics.length > 3 && (
-              <span className="text-[10px] font-space font-bold text-[#666] self-center">
+              <span className="text-[10px] font-space font-bold text-[#666] dark:text-[#8b949e] self-center">
                 +{repo.topics.length - 3}
               </span>
             )}
@@ -179,25 +182,25 @@ export function RepoCard({
       </div>
 
       {/* Footer Metrics & Actions */}
-      <div className="mt-4 pt-3 border-t-2 border-dashed border-[#1a1a1a]/15 space-y-3 font-space text-xs">
+      <div className="mt-4 pt-3 border-t-2 border-dashed border-[#1a1a1a]/15 dark:border-white/10 space-y-3 font-space text-xs">
         {/* Telemetry Row */}
-        <div className="flex items-center justify-between text-[#555]">
+        <div className="flex items-center justify-between text-[#555] dark:text-[#8b949e]">
           <div className="flex items-center gap-2">
-            <span title="Repository age" className="font-bold text-[#1a1a1a]">
+            <span title="Repository age" className="font-bold text-[#1a1a1a] dark:text-[#f0f6fc]">
               {age.label} old
             </span>
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1 font-bold text-[#1a1a1a]" title="Stars">
-              <Star className="w-3.5 h-3.5 fill-[#ffcc5c] text-[#1a1a1a] stroke-[2]" />
+            <span className="flex items-center gap-1 font-bold text-[#1a1a1a] dark:text-[#f0f6fc]" title="Stars">
+              <Star className="w-3.5 h-3.5 fill-[#ffcc5c] text-[#1a1a1a] dark:text-[#ffcc5c] stroke-[2]" />
               <span>{repo.stargazers_count}</span>
             </span>
-            <span className="flex items-center gap-1 font-bold text-[#1a1a1a]" title="Forks">
-              <GitFork className="w-3.5 h-3.5 text-[#1a1a1a] stroke-[2.5]" />
+            <span className="flex items-center gap-1 font-bold text-[#1a1a1a] dark:text-[#f0f6fc]" title="Forks">
+              <GitFork className="w-3.5 h-3.5 text-[#1a1a1a] dark:text-[#f0f6fc] stroke-[2.5]" />
               <span>{repo.forks_count}</span>
             </span>
-            <span className="text-[#666]" title="Disk space">
+            <span className="text-[#666] dark:text-[#8b949e]" title="Disk space">
               {formatRepoSize(repo.size)}
             </span>
           </div>
@@ -205,7 +208,7 @@ export function RepoCard({
 
         {/* Action Buttons Row */}
         <div className="flex items-center justify-between gap-2 pt-0.5">
-          <span className="text-[11px] text-[#666] truncate" title={`Pushed: ${new Date(repo.pushed_at).toLocaleString()}`}>
+          <span className="text-[11px] text-[#666] dark:text-[#8b949e] truncate" title={`Pushed: ${new Date(repo.pushed_at).toLocaleString()}`}>
             Active {formatRelativeTime(repo.pushed_at)}
           </span>
 
@@ -213,7 +216,7 @@ export function RepoCard({
             {onOpenDrawer && (
               <button
                 onClick={() => onOpenDrawer(repo)}
-                className="w-8 h-8 rounded-full border-2 border-[#1a1a1a] flex items-center justify-center bg-white hover:bg-[#4ecdc4] text-[#1a1a1a] transition shadow-[2px_2px_0_#1a1a1a] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer"
+                className="w-8 h-8 rounded-full border-2 border-[#1a1a1a] dark:border-[#30363d] flex items-center justify-center bg-white dark:bg-[#21262d] hover:bg-[#4ecdc4] text-[#1a1a1a] dark:text-[#f0f6fc] transition shadow-[2px_2px_0_#1a1a1a] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer"
                 title="Inspect repository details & contributors"
               >
                 <SlidersHorizontal className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -223,17 +226,17 @@ export function RepoCard({
             {repo.fork && (
               <>
                 {isSyncing ? (
-                  <span className="px-2.5 py-1 rounded-lg text-xs font-bold font-space bg-[#fffef2] text-[#1a1a1a] border-2 border-[#1a1a1a] shadow-[2px_2px_0_#1a1a1a] inline-flex items-center gap-1">
+                  <span className="px-2.5 py-1 rounded-lg text-xs font-bold font-space bg-[#fffef2] dark:bg-[#21262d] text-[#1a1a1a] dark:text-[#f0f6fc] border-2 border-[#1a1a1a] dark:border-[#30363d] shadow-[2px_2px_0_#1a1a1a] inline-flex items-center gap-1">
                     <RefreshCw className="w-3 h-3 animate-spin text-[#ff6b6b] stroke-[2.5]" />
                     <span>Syncing...</span>
                   </span>
                 ) : isInSync ? (
                   <span
                     id={`card-synced-badge-${repo.id}`}
-                    className="px-2.5 py-1 rounded-lg text-xs font-bold font-space bg-[#10b981]/20 text-[#065f46] border-2 border-[#10b981] shadow-[2px_2px_0_#1a1a1a] inline-flex items-center gap-1"
+                    className="px-2.5 py-1 rounded-lg text-xs font-bold font-space bg-[#10b981]/20 text-[#065f46] dark:text-[#39d353] border-2 border-[#10b981] shadow-[2px_2px_0_#1a1a1a] inline-flex items-center gap-1"
                     title="Fork is in sync and up to date with upstream"
                   >
-                    <Check className="w-3.5 h-3.5 text-[#065f46] stroke-[3]" />
+                    <Check className="w-3.5 h-3.5 stroke-[3]" />
                     <span>Synced</span>
                   </span>
                 ) : forkSyncStatus?.status === 'behind' ? (
@@ -243,7 +246,7 @@ export function RepoCard({
                       if (onDirectSync) onDirectSync(repo);
                       else if (onSyncClick) onSyncClick(repo);
                     }}
-                    className="px-2.5 py-1 rounded-lg text-xs font-bold font-space bg-[#ffcc5c] hover:bg-[#ffbe3b] text-[#1a1a1a] border-2 border-[#1a1a1a] shadow-[2px_2px_0_#1a1a1a] active:translate-x-0.5 active:translate-y-0.5 transition cursor-pointer inline-flex items-center gap-1"
+                    className="px-2.5 py-1 rounded-lg text-xs font-bold font-space bg-[#ffcc5c] dark:bg-[#f0883e] hover:bg-[#ffbe3b] text-[#1a1a1a] border-2 border-[#1a1a1a] dark:border-[#30363d] shadow-[2px_2px_0_#1a1a1a] active:translate-x-0.5 active:translate-y-0.5 transition cursor-pointer inline-flex items-center gap-1"
                     title={`Fast-forward ${forkSyncStatus.behind_by} commits behind upstream`}
                   >
                     <GitFork className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -256,7 +259,7 @@ export function RepoCard({
                       if (onDirectSync) onDirectSync(repo);
                       else onSyncClick(repo);
                     }}
-                    className="px-2.5 py-1 rounded-lg text-xs font-bold font-space bg-[#ffcc5c] hover:bg-[#ffbe3b] text-[#1a1a1a] border-2 border-[#1a1a1a] shadow-[2px_2px_0_#1a1a1a] active:translate-x-0.5 active:translate-y-0.5 transition cursor-pointer"
+                    className="px-2.5 py-1 rounded-lg text-xs font-bold font-space bg-[#ffcc5c] dark:bg-[#f0883e] hover:bg-[#ffbe3b] text-[#1a1a1a] border-2 border-[#1a1a1a] dark:border-[#30363d] shadow-[2px_2px_0_#1a1a1a] active:translate-x-0.5 active:translate-y-0.5 transition cursor-pointer"
                   >
                     Sync
                   </button>
@@ -266,7 +269,7 @@ export function RepoCard({
 
             <button
               onClick={() => onArchiveToggle(repo, !repo.archived)}
-              className="w-8 h-8 rounded-full border-2 border-[#1a1a1a] flex items-center justify-center bg-white hover:bg-[#ffcc5c] text-[#1a1a1a] transition shadow-[2px_2px_0_#1a1a1a] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer"
+              className="w-8 h-8 rounded-full border-2 border-[#1a1a1a] dark:border-[#30363d] flex items-center justify-center bg-white dark:bg-[#21262d] hover:bg-[#ffcc5c] dark:hover:bg-[#f0883e] dark:hover:text-black text-[#1a1a1a] dark:text-[#f0f6fc] transition shadow-[2px_2px_0_#1a1a1a] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer"
               title={repo.archived ? 'Unarchive repository' : 'Archive repository'}
             >
               {repo.archived ? (
@@ -278,7 +281,7 @@ export function RepoCard({
 
             <button
               onClick={() => onDeleteClick(repo)}
-              className="w-8 h-8 rounded-full border-2 border-[#1a1a1a] flex items-center justify-center bg-white hover:bg-[#ff6b6b] hover:text-white text-[#1a1a1a] transition shadow-[2px_2px_0_#1a1a1a] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer"
+              className="w-8 h-8 rounded-full border-2 border-[#1a1a1a] dark:border-[#30363d] flex items-center justify-center bg-white dark:bg-[#21262d] hover:bg-[#ff6b6b] hover:text-white text-[#1a1a1a] dark:text-[#f0f6fc] transition shadow-[2px_2px_0_#1a1a1a] active:translate-x-0.5 active:translate-y-0.5 cursor-pointer"
               title="Delete repository"
             >
               <Trash2 className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -289,4 +292,3 @@ export function RepoCard({
     </div>
   );
 }
-
