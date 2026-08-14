@@ -1,0 +1,34 @@
+@import "tailwindcss";
+
+@theme {
+  --font-heading: 'Plus Jakarta Sans', sans-serif;
+  --font-mono: 'Space Mono', monospace;
+  --font-sans: 'Inter', sans-serif;
+}
+
+:root {
+  --bg: #fffef2;
+  --ink: #1a1a1a;
+  --ink-muted: #555555;
+  --ink-faint: rgba(26, 26, 26, 0.08);
+  --accent: #ff6b6b;
+  --teal: #4ecdc4;
+  --yellow: #ffcc5c;
+  --card-bg: #ffffff;
+}
+
+body {
+  background-color: #fffef2;
+  color: #1a1a1a;
+  font-family: 'Inter', sans-serif;
+  background-image: radial-gradient(rgba(26, 26, 26, 0.08) 1.5px, transparent 1.5px);
+  background-size: 24px 24px;
+}
+
+.font-heading {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+}
+
+.font-space {
+  font-family: 'Space Mono', monospace;
+}
