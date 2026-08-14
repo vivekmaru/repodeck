@@ -123,6 +123,89 @@ export interface RepoDetailsData {
   totalBytes: number;
 }
 
+export interface BranchInfo {
+  name: string;
+  commit: {
+    sha: string;
+    commit: {
+      message: string;
+      author: {
+        name: string;
+        date: string;
+      };
+    };
+  };
+  protected: boolean;
+  is_default: boolean;
+  is_merged: boolean;
+  is_stale: boolean;
+  ahead_by: number;
+  behind_by: number;
+}
+
+export interface ReleaseAsset {
+  id: number;
+  name: string;
+  size: number;
+  download_count: number;
+  browser_download_url: string;
+  content_type: string;
+}
+
+export interface ReleaseInfo {
+  id: number;
+  tag_name: string;
+  name: string;
+  body: string;
+  draft: boolean;
+  prerelease: boolean;
+  created_at: string;
+  published_at: string;
+  author: {
+    login: string;
+    avatar_url: string;
+  };
+  html_url: string;
+  assets: ReleaseAsset[];
+}
+
+export interface ReleaseTag {
+  name: string;
+  commit: {
+    sha: string;
+  };
+}
+
+export interface RepoReleasesData {
+  releases: ReleaseInfo[];
+  tags: ReleaseTag[];
+}
+
+export interface IssueOrPrInfo {
+  id: number;
+  number: number;
+  title: string;
+  state: 'open' | 'closed';
+  is_pr: boolean;
+  draft?: boolean;
+  html_url: string;
+  created_at: string;
+  updated_at: string;
+  comments: number;
+  user: {
+    login: string;
+    avatar_url: string;
+  };
+  labels: Array<{
+    id: number;
+    name: string;
+    color: string;
+    description?: string;
+  }>;
+}
+
+export type ThemeMode = 'light' | 'dark';
+
 export interface AuthSession {
   authenticated: boolean;
   user: GitHubUser | null;

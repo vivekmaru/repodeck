@@ -24,7 +24,8 @@ import {
   GitHubRepo, 
   AuthSession, 
   FilterOptions,
-  ForkSyncStatus
+  ForkSyncStatus,
+  ThemeMode
 } from './types';
 import { Navbar } from './components/Navbar';
 import { FilterBar } from './components/FilterBar';
@@ -40,6 +41,7 @@ import { RepoDetailDrawer } from './components/RepoDetailDrawer';
 import { AuthModal } from './components/AuthModal';
 import { ToastContainer, ToastMessage } from './components/Toast';
 import { getActivityLevel } from './utils/github';
+import { api } from './services/api';
 
 export default function App() {
   const [session, setSession] = useState<AuthSession | null>(null);
@@ -52,16 +54,31 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
   const [authModalOpen, setAuthModalOpen] = useState(false);
 
+  // Theme state
+  const [theme, setTheme] = useState<ThemeMode>(() => {
+    const saved = localStorage.getItem('repodeck_theme');
+    if (saved === 'dark' || saved === 'light') return saved;
+    if (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      return 'dark';
+    }
+    return 'light';
+  });
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    localStorage.setItem('repodeck_theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  };
+
   // Selection state for batch operations
   const [selectedRepoIds, setSelectedRepoIds] = useState<Set<number>>(new Set());
 
   // Fork sync state mapping & active operations
   const [forkSyncStatuses, setForkSyncStatuses] = useState<Record<number, ForkSyncStatus>>({});
   const [syncingForkIds, setSyncingForkIds] = useState<Set<number>>(new Set());
-
-  // Inline PAT quick connect input for banner
-  const [inlinePat, setInlinePat] = useState('');
-  const [inlinePatLoading, setInlinePatLoading] = useState(false);
 
   // Modals & Drawers
   const [repoToDelete, setRepoToDelete] = useState<GitHubRepo | null>(null);
@@ -94,12 +111,9 @@ export default function App() {
   // Fetch session
   const fetchSession = useCallback(async () => {
     try {
-      const res = await fetch('/api/auth/session');
-      if (res.ok) {
-        const data: AuthSession = await res.json();
-        setSession(data);
-        return data;
-      }
+      const data = await api.auth.getSession();
+      setSession(data);
+      return data;
     } catch (e) {
       console.error('Session fetch failed', e);
     } finally {
@@ -112,20 +126,13 @@ export default function App() {
   const loadGitHubData = useCallback(async () => {
     setDataLoading(true);
     try {
-      const [reposRes, starredRes] = await Promise.all([
-        fetch('/api/github/repos'),
-        fetch('/api/github/starred'),
+      const [reposData, starredData] = await Promise.all([
+        api.repos.getRepos().catch(() => []),
+        api.starred.getStarred().catch(() => []),
       ]);
 
-      if (reposRes.ok) {
-        const reposData = await reposRes.json();
-        setRepos(Array.isArray(reposData) ? reposData : []);
-      }
-
-      if (starredRes.ok) {
-        const starredData = await starredRes.json();
-        setStarred(Array.isArray(starredData) ? starredData : []);
-      }
+      setRepos(Array.isArray(reposData) ? reposData : []);
+      setStarred(Array.isArray(starredData) ? starredData : []);
     } catch (err: any) {
       addToast('error', 'Failed to fetch repositories', err.message);
     } finally {
@@ -154,12 +161,11 @@ export default function App() {
     const prefetchForkStatuses = async () => {
       for (const fork of forks) {
         try {
-          const res = await fetch(`/api/github/forks/${fork.owner.login}/${fork.name}/compare`);
-          if (res.ok && isMounted) {
-            const data: ForkSyncStatus = await res.json();
+          const data = await api.forks.compare(fork.owner.login, fork.name);
+          if (isMounted && data) {
             setForkSyncStatuses((prev) => ({ ...prev, [fork.id]: data }));
           }
-        } catch (e) {
+        } catch {
           // silently ignore background comparison failures
         }
       }
@@ -174,7 +180,6 @@ export default function App() {
   // Keyboard shortcut listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't intercept when user is typing in an input
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) {
         if (e.key === 'Escape') {
           (e.target as HTMLElement).blur();
@@ -205,7 +210,6 @@ export default function App() {
   // OAuth popup message listener
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      // Validate that message comes from the same origin
       if (event.origin !== window.location.origin && !event.origin.includes('localhost')) {
         return;
       }
@@ -230,13 +234,8 @@ export default function App() {
   // PAT login
   const handlePatLogin = async (token: string): Promise<boolean> => {
     try {
-      const res = await fetch('/api/auth/pat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token }),
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
+      const data = await api.auth.loginPat(token);
+      if (data.success) {
         addToast('success', 'Connected with Token', `Authenticated as @${data.user.login}`);
         await fetchSession();
         await loadGitHubData();
@@ -249,27 +248,11 @@ export default function App() {
     }
   };
 
-  // Inline PAT quick submit
-  const handleInlinePatSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inlinePat.trim()) return;
-    setInlinePatLoading(true);
-    try {
-      const ok = await handlePatLogin(inlinePat.trim());
-      if (ok) {
-        setInlinePat('');
-      }
-    } finally {
-      setInlinePatLoading(false);
-    }
-  };
-
   // Demo login
   const handleDemoLogin = async (): Promise<boolean> => {
     try {
-      const res = await fetch('/api/auth/demo', { method: 'POST' });
-      const data = await res.json();
-      if (res.ok && data.success) {
+      const data = await api.auth.loginDemo();
+      if (data.success) {
         await fetchSession();
         await loadGitHubData();
         return true;
@@ -284,7 +267,7 @@ export default function App() {
   // Logout
   const handleLogout = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      await api.auth.logout();
       setSession(null);
       setRepos([]);
       setStarred([]);
@@ -299,34 +282,23 @@ export default function App() {
   const handleSyncFork = async (repo: GitHubRepo): Promise<boolean> => {
     setSyncingForkIds((prev) => new Set(prev).add(repo.id));
     try {
-      const res = await fetch(`/api/github/forks/${repo.owner.login}/${repo.name}/sync`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ branch: repo.default_branch || 'main' }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        addToast('success', 'Fork Fast-Forwarded!', data.message || `Merged upstream into ${repo.name}`);
-        setRepos((prev) =>
-          prev.map((r) => (r.id === repo.id ? { ...r, pushed_at: new Date().toISOString() } : r))
-        );
-        // Mark fork as in-sync (up to date)
-        setForkSyncStatuses((prev) => ({
-          ...prev,
-          [repo.id]: {
-            parent_full_name: repo.parent?.full_name || 'upstream',
-            parent_branch: 'main',
-            fork_branch: repo.default_branch || 'main',
-            status: 'up_to_date',
-            behind_by: 0,
-            ahead_by: 0,
-          },
-        }));
-        return true;
-      } else {
-        addToast('error', 'Sync Failed', data.error || 'Could not auto-merge upstream branch.');
-        return false;
-      }
+      const data = await api.forks.sync(repo.owner.login, repo.name, repo.default_branch || 'main');
+      addToast('success', 'Fork Fast-Forwarded!', data.message || `Merged upstream into ${repo.name}`);
+      setRepos((prev) =>
+        prev.map((r) => (r.id === repo.id ? { ...r, pushed_at: new Date().toISOString() } : r))
+      );
+      setForkSyncStatuses((prev) => ({
+        ...prev,
+        [repo.id]: {
+          parent_full_name: repo.parent?.full_name || 'upstream',
+          parent_branch: 'main',
+          fork_branch: repo.default_branch || 'main',
+          status: 'up_to_date',
+          behind_by: 0,
+          ahead_by: 0,
+        },
+      }));
+      return true;
     } catch (err: any) {
       addToast('error', 'Sync Failed', err.message);
       return false;
@@ -342,20 +314,8 @@ export default function App() {
   // Delete Repository
   const handleConfirmDelete = async (repo: GitHubRepo): Promise<{ success: boolean; error?: string }> => {
     try {
-      const res = await fetch(`/api/github/repos/${repo.owner.login}/${repo.name}`, {
-        method: 'DELETE',
-      });
-      
-      let data: any = {};
-      const contentType = res.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        data = await res.json();
-      } else {
-        const text = await res.text();
-        data = { error: res.statusText || (text.length < 200 ? text : `Server returned status ${res.status}`) };
-      }
-
-      if (res.ok && data.success) {
+      const res = await api.repos.deleteRepo(repo.owner.login, repo.name);
+      if (res.success) {
         addToast('success', 'Repository Deleted', `${repo.full_name} was permanently removed.`);
         setRepos((prev) => prev.filter((r) => r.id !== repo.id));
         setRepoToDelete(null);
@@ -365,11 +325,8 @@ export default function App() {
           return next;
         });
         return { success: true };
-      } else {
-        const errorMsg = data.error || data.message || `Failed to delete repository (HTTP ${res.status})`;
-        addToast('error', 'Delete Failed', errorMsg);
-        return { success: false, error: errorMsg };
       }
+      return { success: false, error: res.message };
     } catch (err: any) {
       const errorMsg = err.message || 'Network error occurred while deleting repository.';
       addToast('error', 'Delete Failed', errorMsg);
@@ -380,22 +337,13 @@ export default function App() {
   // Archive / Unarchive toggle
   const handleArchiveToggle = async (repo: GitHubRepo, newArchivedState: boolean) => {
     try {
-      const res = await fetch(`/api/github/repos/${repo.owner.login}/${repo.name}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ archived: newArchivedState }),
-      });
-      if (res.ok) {
-        setRepos((prev) => prev.map((r) => (r.id === repo.id ? { ...r, archived: newArchivedState } : r)));
-        addToast(
-          'success',
-          newArchivedState ? 'Repository Archived' : 'Repository Restored',
-          `${repo.name} is now ${newArchivedState ? 'read-only' : 'active'}.`
-        );
-      } else {
-        const data = await res.json();
-        addToast('error', 'Archive Toggle Failed', data.error || 'Could not update archive state.');
-      }
+      await api.repos.toggleArchive(repo.owner.login, repo.name, newArchivedState);
+      setRepos((prev) => prev.map((r) => (r.id === repo.id ? { ...r, archived: newArchivedState } : r)));
+      addToast(
+        'success',
+        newArchivedState ? 'Repository Archived' : 'Repository Restored',
+        `${repo.name} is now ${newArchivedState ? 'read-only' : 'active'}.`
+      );
     } catch (err: any) {
       addToast('error', 'Archive Error', err.message);
     }
@@ -403,28 +351,19 @@ export default function App() {
 
   // Batch Archive selected repos
   const handleBatchArchive = async () => {
-    const selectedList = repos.filter((r) => selectedRepoIds.has(r.id));
+    const selectedList = repos.filter((r) => selectedRepoIds.has(r.id)).map((r) => ({ owner: r.owner.login, repo: r.name }));
     if (selectedList.length === 0) return;
 
-    let successCount = 0;
-    for (const repo of selectedList) {
-      try {
-        const res = await fetch(`/api/github/repos/${repo.owner.login}/${repo.name}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ archived: true }),
-        });
-        if (res.ok) successCount++;
-      } catch (e) {
-        console.error(e);
-      }
+    try {
+      const res = await api.repos.batchArchive(selectedList, true);
+      setRepos((prev) =>
+        prev.map((r) => (selectedRepoIds.has(r.id) ? { ...r, archived: true } : r))
+      );
+      setSelectedRepoIds(new Set());
+      addToast('success', 'Batch Archive Complete', `Archived ${res.updated} repositories.`);
+    } catch (err: any) {
+      addToast('error', 'Batch Archive Failed', err.message);
     }
-
-    setRepos((prev) =>
-      prev.map((r) => (selectedRepoIds.has(r.id) ? { ...r, archived: true } : r))
-    );
-    setSelectedRepoIds(new Set());
-    addToast('success', 'Batch Archive Complete', `Archived ${successCount} repositories.`);
   };
 
   // Batch Sync selected forks
@@ -443,46 +382,23 @@ export default function App() {
 
   // Batch Delete selected repos with confirmation
   const handleConfirmBatchDelete = async (selectedList: GitHubRepo[]): Promise<{ succeeded: number; failed: number }> => {
-    let succeeded = 0;
-    let failed = 0;
-    const deletedIds = new Set<number>();
-
-    for (const repo of selectedList) {
-      try {
-        const res = await fetch(`/api/github/repos/${repo.owner.login}/${repo.name}`, {
-          method: 'DELETE',
-        });
-        const data = await res.json().catch(() => ({}));
-        if (res.ok && data.success) {
-          succeeded++;
-          deletedIds.add(repo.id);
-        } else {
-          failed++;
-        }
-      } catch (err) {
-        failed++;
-      }
-    }
-
-    if (succeeded > 0) {
-      setRepos((prev) => prev.filter((r) => !deletedIds.has(r.id)));
-      setSelectedRepoIds((prev) => {
-        const next = new Set(prev);
-        deletedIds.forEach((id) => next.delete(id));
-        return next;
-      });
+    const payload = selectedList.map((r) => ({ owner: r.owner.login, repo: r.name }));
+    try {
+      const res = await api.repos.batchDelete(payload);
+      const deletedNames = new Set(res.results.filter((r) => r.success).map((r) => `${r.owner}/${r.repo}`));
+      
+      setRepos((prev) => prev.filter((r) => !deletedNames.has(`${r.owner.login}/${r.name}`)));
+      setSelectedRepoIds(new Set());
       addToast(
         'success',
         'Batch Deletion Complete',
-        `Successfully deleted ${succeeded} ${succeeded === 1 ? 'repository' : 'repositories'}.${
-          failed > 0 ? ` (${failed} failed)` : ''
-        }`
+        `Successfully deleted ${res.deleted} repositories.`
       );
-    } else if (failed > 0) {
-      addToast('error', 'Batch Deletion Failed', `Failed to delete ${failed} selected repositories.`);
+      return { succeeded: res.deleted, failed: res.total - res.deleted };
+    } catch (err: any) {
+      addToast('error', 'Batch Deletion Failed', err.message);
+      return { succeeded: 0, failed: selectedList.length };
     }
-
-    return { succeeded, failed };
   };
 
   // Export selected repositories metadata
@@ -496,7 +412,7 @@ export default function App() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `octopulse-repos-export-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `repodeck-export-${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(url);
       addToast('info', 'Export Generated', `Exported ${selectedList.length} repositories to JSON.`);
@@ -525,10 +441,8 @@ export default function App() {
   // Unstar repository
   const handleUnstar = async (repo: GitHubRepo): Promise<boolean> => {
     try {
-      const res = await fetch(`/api/github/starred/${repo.owner.login}/${repo.name}`, {
-        method: 'DELETE',
-      });
-      if (res.ok) {
+      const res = await api.starred.unstar(repo.owner.login, repo.name);
+      if (res.success) {
         setStarred((prev) => prev.filter((r) => r.id !== repo.id));
         addToast('info', 'Unstarred Repository', `Removed ${repo.full_name} from starred collection.`);
         return true;
@@ -627,7 +541,7 @@ export default function App() {
   const isDemo = session?.authMethod === 'demo';
 
   return (
-    <div className="min-h-screen bg-[#fffef2] text-[#1a1a1a] flex flex-col font-sans selection:bg-[#ffcc5c] selection:text-[#1a1a1a]">
+    <div className="min-h-screen bg-[#fffef2] dark:bg-[#0d1117] text-[#1a1a1a] dark:text-[#f0f6fc] flex flex-col font-sans selection:bg-[#ffcc5c] selection:text-[#1a1a1a]">
       {/* Navigation Bar */}
       <Navbar
         session={session}
@@ -641,24 +555,26 @@ export default function App() {
         forkCount={forkedRepos.length}
         starredCount={starred.length}
         staleCount={staleCandidates.length}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* Demo Mode / Connect Quick Notification Strip */}
         {isDemo && (
-          <div className="bg-white border-2 border-[#1a1a1a] rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-[4px_4px_0_#1a1a1a]">
+          <div className="bg-white dark:bg-[#161b22] border-2 border-[#1a1a1a] dark:border-[#30363d] rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-[4px_4px_0_#1a1a1a]">
             <div className="flex items-center gap-3">
-              <div className="w-3 h-3 rounded-full bg-[#ffcc5c] border-2 border-[#1a1a1a] shrink-0 animate-pulse" />
-              <span className="font-space font-bold text-[#1a1a1a]">
-                Sandbox Demo Active: Previewing sample repository portfolio & fork sync.
+              <div className="w-3 h-3 rounded-full bg-[#ffcc5c] border-2 border-[#1a1a1a] dark:border-[#30363d] shrink-0 animate-pulse" />
+              <span className="font-space font-bold text-[#1a1a1a] dark:text-[#f0f6fc]">
+                Sandbox Demo Active: Previewing sample repository portfolio, branch auditor & releases telemetry.
               </span>
             </div>
 
             <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
               <button
                 onClick={() => setAuthModalOpen(true)}
-                className="px-4 py-2 rounded-xl bg-[#4ecdc4] hover:bg-[#38b2ac] text-[#1a1a1a] border-2 border-[#1a1a1a] text-xs font-space font-bold shadow-[2px_2px_0_#1a1a1a] active:translate-x-0.5 active:translate-y-0.5 transition cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-[#4ecdc4] hover:bg-[#38b2ac] text-[#1a1a1a] border-2 border-[#1a1a1a] dark:border-[#30363d] text-xs font-space font-bold shadow-[2px_2px_0_#1a1a1a] active:translate-x-0.5 active:translate-y-0.5 transition cursor-pointer"
               >
                 Connect Real GitHub
               </button>
@@ -682,17 +598,17 @@ export default function App() {
 
             {/* Repository List / Table / Grid */}
             {dataLoading && repos.length === 0 ? (
-              <div className="py-20 text-center space-y-3 bg-white border-[3px] border-[#1a1a1a] rounded-2xl shadow-[6px_6px_0_#1a1a1a]">
+              <div className="py-20 text-center space-y-3 bg-white dark:bg-[#161b22] border-[3px] border-[#1a1a1a] dark:border-[#30363d] rounded-2xl shadow-[6px_6px_0_#1a1a1a]">
                 <RefreshCw className="w-8 h-8 animate-spin text-[#ff6b6b] mx-auto stroke-[2.5]" />
-                <p className="text-sm text-[#1a1a1a] font-space font-bold">Fetching repository catalog...</p>
+                <p className="text-sm text-[#1a1a1a] dark:text-[#f0f6fc] font-space font-bold">Fetching repository catalog...</p>
               </div>
             ) : filteredRepos.length === 0 ? (
-              <div className="bg-white border-[3px] border-[#1a1a1a] rounded-2xl p-12 text-center space-y-3 shadow-[6px_6px_0_#1a1a1a]">
-                <div className="w-14 h-14 rounded-2xl bg-[#fffef2] border-2 border-[#1a1a1a] flex items-center justify-center text-[#666] mx-auto shadow-[3px_3px_0_#1a1a1a]">
+              <div className="bg-white dark:bg-[#161b22] border-[3px] border-[#1a1a1a] dark:border-[#30363d] rounded-2xl p-12 text-center space-y-3 shadow-[6px_6px_0_#1a1a1a]">
+                <div className="w-14 h-14 rounded-2xl bg-[#fffef2] dark:bg-[#21262d] border-2 border-[#1a1a1a] dark:border-[#30363d] flex items-center justify-center text-[#666] dark:text-[#8b949e] mx-auto shadow-[3px_3px_0_#1a1a1a]">
                   <Layers className="w-7 h-7 stroke-[2.5]" />
                 </div>
-                <h3 className="font-heading text-xl font-bold text-[#1a1a1a]">No matching repositories found</h3>
-                <p className="text-xs text-[#555] font-space font-medium">Adjust search query or active filter settings.</p>
+                <h3 className="font-heading text-xl font-bold text-[#1a1a1a] dark:text-[#f0f6fc]">No matching repositories found</h3>
+                <p className="text-xs text-[#555] dark:text-[#8b949e] font-space font-medium">Adjust search query or active filter settings.</p>
               </div>
             ) : viewMode === 'table' ? (
               <RepoTableView

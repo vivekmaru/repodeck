@@ -15,14 +15,30 @@
   --teal: #4ecdc4;
   --yellow: #ffcc5c;
   --card-bg: #ffffff;
+  --header-bg: #fffef2;
+  --border-color: #1a1a1a;
+}
+
+.dark {
+  --bg: #0d1117;
+  --ink: #f0f6fc;
+  --ink-muted: #8b949e;
+  --ink-faint: rgba(255, 255, 255, 0.08);
+  --accent: #ff7b72;
+  --teal: #39d353;
+  --yellow: #f0883e;
+  --card-bg: #161b22;
+  --header-bg: #161b22;
+  --border-color: #30363d;
 }
 
 body {
-  background-color: #fffef2;
-  color: #1a1a1a;
+  background-color: var(--bg);
+  color: var(--ink);
   font-family: 'Inter', sans-serif;
-  background-image: radial-gradient(rgba(26, 26, 26, 0.08) 1.5px, transparent 1.5px);
+  background-image: radial-gradient(var(--ink-faint) 1.5px, transparent 1.5px);
   background-size: 24px 24px;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .font-heading {
@@ -31,4 +47,20 @@ body {
 
 .font-space {
   font-family: 'Space Mono', monospace;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.3);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.5);
 }
