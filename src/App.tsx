@@ -205,15 +205,19 @@ export default function App() {
   // OAuth popup message listener
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      const origin = event.origin;
-      if (!origin.endsWith('.run.app') && !origin.includes('localhost')) {
+      // Validate that message comes from the same origin
+      if (event.origin !== window.location.origin && !event.origin.includes('localhost')) {
         return;
       }
 
       if (event.data?.type === 'OAUTH_AUTH_SUCCESS') {
         addToast('success', 'Connected to GitHub', 'Your GitHub account has been authenticated successfully.');
         setAuthModalOpen(false);
-        fetchSession().then(() => loadGitHubData());
+        fetchSession().then((sess) => {
+          if (sess?.authenticated) {
+            loadGitHubData();
+          }
+        });
       } else if (event.data?.type === 'OAUTH_AUTH_ERROR') {
         addToast('error', 'OAuth Failed', event.data.error || 'Authentication was denied or encountered an error.');
       }

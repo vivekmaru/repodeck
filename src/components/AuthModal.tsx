@@ -71,6 +71,21 @@ export function AuthModal({
       if (!popup) {
         throw new Error('Popup was blocked by your browser. Please allow popups for this site.');
       }
+
+      // Fallback monitor in case postMessage is intercepted or delayed
+      const popupTimer = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(popupTimer);
+          fetch('/api/auth/session')
+            .then((r) => r.json())
+            .then((sess) => {
+              if (sess?.authenticated) {
+                onClose();
+              }
+            })
+            .catch(() => {});
+        }
+      }, 750);
     } catch (err: any) {
       setOauthError(err.message || 'OAuth initiation failed');
     } finally {

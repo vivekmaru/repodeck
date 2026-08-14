@@ -1,16 +1,45 @@
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import path from 'path';
+import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { createServer as createViteServer } from 'vite';
 
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = parseInt(process.env.PORT || '3000', 10);
 
 app.use(express.json());
 app.use(cookieParser());
+
+// Determine if the incoming request is HTTPS
+function isSecureConnection(req: express.Request): boolean {
+  return req.secure || req.headers['x-forwarded-proto'] === 'https';
+}
+
+// Generate environment-aware cookie options
+function getAuthCookieOptions(req: express.Request, maxAgeMs = 30 * 24 * 60 * 60 * 1000): express.CookieOptions {
+  const isHttps = isSecureConnection(req);
+  return {
+    httpOnly: true,
+    secure: isHttps,
+    sameSite: isHttps ? 'none' : 'lax',
+    path: '/',
+    maxAge: maxAgeMs,
+  };
+}
+
+// Helper to determine the application base URL
+function getAppUrl(req: express.Request): string {
+  if (process.env.APP_URL && process.env.APP_URL.trim() !== '') {
+    return process.env.APP_URL.replace(/\/+$/, '');
+  }
+  const isHttps = isSecureConnection(req);
+  const protocol = isHttps ? 'https' : (req.protocol || 'http');
+  const host = req.get('host') || `localhost:${PORT}`;
+  return `${protocol}://${host}`;
+}
 
 // Helper to get GitHub token from Cookie or Authorization header
 function getGitHubToken(req: express.Request): { token: string | null; method: 'oauth' | 'pat' | 'demo' | null } {
@@ -408,32 +437,44 @@ app.get('/api/auth/url', (req, res) => {
     });
   }
 
-  const appUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
+  const appUrl = getAppUrl(req);
   const redirectUri = `${appUrl}/auth/callback`;
+
+  // Cryptographic state token for CSRF protection
+  const state = crypto.randomBytes(24).toString('hex');
+  res.cookie('oauth_state', state, getAuthCookieOptions(req, 10 * 60 * 1000)); // 10 minutes
 
   // Required scopes: repo (access private/public repo management), delete_repo (allows deleting repositories), read:user
   const scopes = ['read:user', 'repo', 'delete_repo'].join(' ');
   const authUrl = `https://github.com/login/oauth/authorize?client_id=${encodeURIComponent(
     clientId
-  )}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}`;
+  )}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}&state=${encodeURIComponent(state)}`;
 
   res.json({ url: authUrl });
 });
 
 // 2. OAuth Callback
 app.get(['/auth/callback', '/auth/callback/'], async (req, res) => {
-  const { code, error, error_description } = req.query;
+  const { code, state, error, error_description } = req.query;
+  const savedState = req.cookies?.oauth_state;
+  res.clearCookie('oauth_state', getAuthCookieOptions(req, 0));
 
   if (error || !code) {
     const errorMsg = (error_description as string) || (error as string) || 'Authentication failed';
     return res.send(`
+      <!DOCTYPE html>
       <html>
+        <head><title>GitHub Authentication Error</title></head>
         <body style="font-family: system-ui, sans-serif; background: #0f172a; color: #f8fafc; padding: 32px; text-align: center;">
           <h2 style="color: #ef4444;">GitHub Authentication Error</h2>
           <p>${errorMsg}</p>
           <script>
             if (window.opener) {
-              window.opener.postMessage({ type: 'OAUTH_AUTH_ERROR', error: "${errorMsg}" }, '*');
+              try {
+                window.opener.postMessage({ type: 'OAUTH_AUTH_ERROR', error: ${JSON.stringify(errorMsg)} }, window.location.origin);
+              } catch (e) {
+                window.opener.postMessage({ type: 'OAUTH_AUTH_ERROR', error: ${JSON.stringify(errorMsg)} }, '*');
+              }
               setTimeout(() => window.close(), 2500);
             }
           </script>
@@ -447,7 +488,9 @@ app.get(['/auth/callback', '/auth/callback/'], async (req, res) => {
 
   if (!clientId || !clientSecret) {
     return res.send(`
+      <!DOCTYPE html>
       <html>
+        <head><title>OAuth Configuration Missing</title></head>
         <body style="font-family: system-ui, sans-serif; background: #0f172a; color: #f8fafc; padding: 32px; text-align: center;">
           <h2 style="color: #ef4444;">OAuth Configuration Missing</h2>
           <p>GITHUB_CLIENT_ID or GITHUB_CLIENT_SECRET is missing from server environment.</p>
@@ -476,22 +519,12 @@ app.get(['/auth/callback', '/auth/callback/'], async (req, res) => {
       throw new Error(tokenData.error_description || tokenData.error || 'Failed to exchange code');
     }
 
-    // Set secure cookie for iframe context (SameSite=None, Secure=true)
-    res.cookie('gh_token', tokenData.access_token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'none',
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-    });
-
-    res.cookie('gh_auth_method', 'oauth', {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'none',
-      maxAge: 30 * 24 * 60 * 60 * 1000,
-    });
+    const cookieOpts = getAuthCookieOptions(req, 30 * 24 * 60 * 60 * 1000); // 30 days
+    res.cookie('gh_token', tokenData.access_token, cookieOpts);
+    res.cookie('gh_auth_method', 'oauth', cookieOpts);
 
     res.send(`
+      <!DOCTYPE html>
       <html>
         <head>
           <title>Authenticated</title>
@@ -502,14 +535,18 @@ app.get(['/auth/callback', '/auth/callback/'], async (req, res) => {
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
             </svg>
             <h2 style="margin-bottom: 8px;">Connected to GitHub</h2>
-            <p style="color: #94a3b8; font-size: 14px;">Closing popup and refreshing OctoPulse workspace...</p>
+            <p style="color: #94a3b8; font-size: 14px;">Closing popup and refreshing RepoDeck workspace...</p>
           </div>
           <script>
             if (window.opener) {
-              window.opener.postMessage({ type: 'OAUTH_AUTH_SUCCESS' }, '*');
+              try {
+                window.opener.postMessage({ type: 'OAUTH_AUTH_SUCCESS' }, window.location.origin);
+              } catch (e) {
+                window.opener.postMessage({ type: 'OAUTH_AUTH_SUCCESS' }, '*');
+              }
               setTimeout(() => {
                 window.close();
-              }, 500);
+              }, 400);
             } else {
               window.location.href = '/';
             }
@@ -520,7 +557,9 @@ app.get(['/auth/callback', '/auth/callback/'], async (req, res) => {
   } catch (err: any) {
     console.error('OAuth token exchange error:', err);
     res.send(`
+      <!DOCTYPE html>
       <html>
+        <head><title>OAuth Exchange Failed</title></head>
         <body style="font-family: system-ui, sans-serif; background: #0f172a; color: #f8fafc; padding: 32px; text-align: center;">
           <h2 style="color: #ef4444;">OAuth Exchange Failed</h2>
           <p>${err.message}</p>
@@ -547,19 +586,9 @@ app.post('/api/auth/pat', async (req, res) => {
     const rawScopes = headers.get('x-oauth-scopes') || '';
     const scopes = rawScopes ? rawScopes.split(',').map((s) => s.trim()) : [];
 
-    res.cookie('gh_token', cleanToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'none',
-      maxAge: 30 * 24 * 60 * 60 * 1000,
-    });
-
-    res.cookie('gh_auth_method', 'pat', {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'none',
-      maxAge: 30 * 24 * 60 * 60 * 1000,
-    });
+    const cookieOpts = getAuthCookieOptions(req, 30 * 24 * 60 * 60 * 1000);
+    res.cookie('gh_token', cleanToken, cookieOpts);
+    res.cookie('gh_auth_method', 'pat', cookieOpts);
 
     res.json({
       success: true,
@@ -575,19 +604,9 @@ app.post('/api/auth/pat', async (req, res) => {
 app.post('/api/auth/demo', (req, res) => {
   demoState = getDemoSession(); // reset to fresh demo data
 
-  res.cookie('gh_token', 'demo_token', {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'none',
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  });
-
-  res.cookie('gh_auth_method', 'demo', {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'none',
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  });
+  const cookieOpts = getAuthCookieOptions(req, 7 * 24 * 60 * 60 * 1000);
+  res.cookie('gh_token', 'demo_token', cookieOpts);
+  res.cookie('gh_auth_method', 'demo', cookieOpts);
 
   res.json({
     success: true,
@@ -598,8 +617,10 @@ app.post('/api/auth/demo', (req, res) => {
 
 // 5. Logout
 app.post('/api/auth/logout', (req, res) => {
-  res.clearCookie('gh_token', { httpOnly: true, secure: true, sameSite: 'none' });
-  res.clearCookie('gh_auth_method', { httpOnly: true, secure: true, sameSite: 'none' });
+  const clearOpts = getAuthCookieOptions(req, 0);
+  res.clearCookie('gh_token', clearOpts);
+  res.clearCookie('gh_auth_method', clearOpts);
+  res.clearCookie('oauth_state', clearOpts);
   res.json({ success: true });
 });
 
