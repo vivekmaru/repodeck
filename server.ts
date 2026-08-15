@@ -17,8 +17,24 @@ dotenv.config();
 const app = express();
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
+// Enable trust proxy for HTTPS detection behind Cloud Run / Render / Cloudflare
+app.set('trust proxy', 1);
+
+// Production Security Headers Middleware
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+
 app.use(express.json());
 app.use(cookieParser());
+
+// Liveness & Healthcheck Endpoint
+app.get('/api/health', (_req, res) => {
+  res.status(200).json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString() });
+});
 
 // Mount Modular API Routers
 app.use(authRouter);
