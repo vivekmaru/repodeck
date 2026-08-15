@@ -1,31 +1,49 @@
 # Product Requirements Document (PRD)
 
 ## Product Name: RepoDeck
-**Purpose**: High-performance, data-dense GitHub repository management, fork upstream synchronization, and lifecycle cleanup console.
+**Purpose**: High-performance, data-dense GitHub repository management, fork upstream synchronization, AI hybrid search, and workspace lifecycle cleanup console.
 
-### Key Objectives
-1. **Repository Lifecycle Management & Auditing**:
-   - Classify repositories by activity tiers (Active, Warm, Quiet, Stale, Dormant) calculated from creation and push timestamps.
-   - Surface disk space footprint and reclaimable volume.
-   - Archive and delete repositories directly with double-confirmation safeguards.
-2. **Upstream Fork Synchronization**:
-   - Compare forked repositories against upstream parent default branches.
-   - Quantify drift (commits behind / ahead / diverged).
-   - Provide 1-click fast-forward synchronization using GitHub's `POST /repos/{owner}/{repo}/merge-upstream` API endpoint.
-   - Provide batch synchronization across all outdated forks.
-3. **Curated Starred Collection**:
-   - Search, filter by language and topic, and unstar unused libraries.
-4. **Data-Dense Developer UI & Deep Inspection**:
-   - Dual-mode view: High-density Table View and Card Grid View.
-   - **Keyboard Navigation**: Full arrow key (`↑` / `↓`) row highlighting with automatic smooth scrolling, `Space` for toggling repository selection, and `Enter` for opening the Slide-over Inspector Drawer.
-   - **API Rate Limit Diagnostics**: Real-time quota status in the navbar button pill and an expanded gauge breakdown inside the profile dropdown (remaining requests, total limit, health badge, visual progress capacity bar, and minutes until the 60-minute window resets).
-   - Interactive Expandable Rows: Inline accordion unfolding with primary language percentage breakdown (segmented multi-color meter and byte counts), recent top contributors with avatars, quick clone copy, and quick actions.
-   - Slide-over Inspector Drawer: Comprehensive drawer panel with smooth motion transitions, dedicated tabs for Languages & Tech Stack, Contributor team roster, Recent Commit Stream, and Lifecycle Telemetry.
-   - Batch selection, batch archive, batch fork sync, batch repository deletion with confirmation safeguards, and JSON/CSV metadata export.
-   - Responsive Batch Action Bar: Adapts on mobile screens (< 640px) using upward dropdown menus and compact stacks when > 3 actions are present to prevent viewport overflow, and compact single-row design on larger screens to minimise horizontal scroll.
-   - Monospace telemetry pills, clear status dots, and hotkeys (`/` for search, `1-4` for navigation tabs, `R` for refresh, `Esc` for drawer/modal close, `↑`/`↓` for row navigation, `Space` for select, `Enter` for inspect).
-   - Crisp, professional typography (Plus Jakarta Sans display headings, Space Mono data telemetry, Inter body text) without cartoonish fonts or generic gradient slop.
-5. **Token Permissions & Scope Diagnostics**:
-   - Proactive verification of `delete_repo` scope on connected tokens.
-   - Descriptive diagnostics differentiating Classic PATs, Fine-Grained tokens, and OAuth permissions.
-   - Safe response parsing across proxy gateways preventing raw HTML parsing syntax errors.
+---
+
+### Key Objectives & Feature Matrix
+
+#### 1. High-Performance Database, Persistence & Caching Engine
+- **Sub-Millisecond Local Persistence**: Native Node.js `node:sqlite` in WAL (Write-Ahead Logging) mode (`PRAGMA synchronous = NORMAL`, 64MB memory cache) providing **<1ms** cold-start repository retrieval and seamless offline capabilities.
+- **Zero Rate Limit HTTP ETag Pipeline**: Automatic caching of GitHub ETags with `304 Not Modified` fast-paths, preventing rate limit quota depletion on application reloads and refreshes.
+- **Single-Roundtrip GraphQL Ingestion**: Consolidates repositories, fork parent hierarchies, language byte breakdowns, and primary commit authors into **1 single GraphQL query** (replacing 50+ N+1 REST queries).
+
+#### 2. Local Vector Embeddings & AI Hybrid Search (RRF Engine)
+- **Tokenized SQLite FTS5 Engine**: Column-weighted BM25 ranked scoring for exact prefix/keyword discovery with automated trigger synchronization (`repos_ai`, `repos_ad`, `repos_au`).
+- **Private Local Vector Embeddings**: Local ONNX inference via `@xenova/transformers` with `all-MiniLM-L6-v2` generating 384-dimensional dense vectors stored in SQLite. Zero external cloud API calls or paid subscriptions required.
+- **Reciprocal Rank Fusion (RRF)**: Combines keyword precision and semantic concept search:
+  $$\text{RRF Score}(d) = \frac{1.0}{60 + \text{rank}_{\text{fts}}(d)} + \frac{1.25}{60 + \text{rank}_{\text{vec}}(d)}$$
+- **Multi-Engine Search Selector**:
+  - ⚡ **Hybrid**: Blended RRF rank.
+  - ⚡ **FTS5**: Exact BM25 token match (<1ms).
+  - 🧠 **AI Match**: Dense vector cosine similarity search.
+- **Live Search Execution Telemetry**: Real-time latency pill (e.g. `⚡ 0.8ms` / `🧠 15.0ms`).
+
+#### 3. Data-Dense Developer UI & Table Virtualization
+- **60 FPS Table Virtualization (`@tanstack/react-virtual`)**: Smooth, performant rendering of 500+ repositories with dynamic row measurement, eliminating DOM bloat and scroll jank.
+- **Interactive Clickable Column Headers**: Direct sort toggling on `REPOSITORY` (Name A-Z / Z-A), `LAST PUSH` (Recent / Stale), `CREATED` (Newest / Oldest), and `STATS` (Most Stars / Least Stars) with live `↑`/`↓` indicators.
+- **2-Tier Responsive Filter Bar**: Full-width search bar paired with non-colliding segmented mode pills on the top row, and multi-dimensional filter selects (Sources, Visibility, Activity, Language, Sort) on the bottom row.
+- **Full-Width Modern Container**: Expands to `max-w-[1720px] 2xl:max-w-[1840px]`, eliminating empty black margins and zero horizontal scroll on standard laptop and desktop screens.
+- **Comprehensive Keyboard Navigation**: Arrow keys (`↑`/`↓`) for row focus, `Space` for multi-select checkboxes, `Enter` for slide-over inspector drawer, `/` for search, and `1-4` for navigation tabs.
+
+#### 4. Upstream Fork Synchronization Hub
+- **Drift Telemetry**: Instant identification of commits behind / ahead / diverged against upstream parent default branches.
+- **Cached Drift Checks**: SQLite cached drift status (<30 min TTL) prevents redundant GitHub compare calls.
+- **1-Click Fast-Forward Merge**: Dispatches GitHub's `merge-upstream` API with batch sync capability across all outdated forks.
+
+#### 5. Portfolio Lifecycle Auditor & Reclaimable Footprint
+- **Lifecycle Classification**: Categorizes repositories into Active (<30d), Warm (<4m), Quiet (<1y), Stale (>1y), and Dormant (>2y).
+- **Disk Storage Breakdown**: Highlights storage footprint in MB/KB and calculates reclaimable space.
+- **Safe Archiving & Deletion Safeguards**: Modal safeguards with typed repository name confirmation and permission scope diagnostics.
+
+#### 6. Starred Repositories Hub
+- **Curated Library Catalog**: Filter by language and topic, sort by stars/last push/name, and unstar unused repositories in 1-click.
+
+#### 7. Authentication & Token Diagnostics
+- **OAuth 2.0 Popup Handshake**: 1-click login with automatic window messaging.
+- **Classic Personal Access Token (PAT)**: Token bearer authentication with live `x-oauth-scopes` verification for `delete_repo`.
+- **Demo Sandbox Mode**: Realistic offline sandbox environment with seeded sample portfolio for rapid previewing.
