@@ -89,12 +89,19 @@ export default function App() {
   // Filtering & Sorting
   const [filters, setFilters] = useState<FilterOptions>({
     search: '',
+    searchMode: 'hybrid',
     visibility: 'all',
     type: 'all',
     activity: 'all',
     language: 'all',
     sort: 'pushed_desc',
   });
+
+  // Server-side SQLite FTS5 & Hybrid Search State
+  const [searchResults, setSearchResults] = useState<GitHubRepo[] | null>(null);
+  const [searchLatency, setSearchLatency] = useState<number | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [isReindexing, setIsReindexing] = useState(false);
 
   const addToast = (type: 'success' | 'error' | 'info', title: string, message?: string) => {
     const id = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -152,29 +159,24 @@ export default function App() {
     });
   }, [fetchSession, loadGitHubData]);
 
-  // Prefetch upstream fork comparison status for all forks
+  // Populate fork comparison status directly from cached repository records (0 network requests on mount)
   useEffect(() => {
-    const forks = repos.filter((r) => r.fork);
-    if (forks.length === 0) return;
-
-    let isMounted = true;
-    const prefetchForkStatuses = async () => {
-      for (const fork of forks) {
-        try {
-          const data = await api.forks.compare(fork.owner.login, fork.name);
-          if (isMounted && data) {
-            setForkSyncStatuses((prev) => ({ ...prev, [fork.id]: data }));
-          }
-        } catch {
-          // silently ignore background comparison failures
-        }
+    const initialStatuses: Record<number, ForkSyncStatus> = {};
+    for (const r of repos) {
+      if (r.fork) {
+        initialStatuses[r.id] = {
+          parent_full_name: r.parent?.full_name || `${r.owner.login}/${r.name}`,
+          parent_branch: r.parent?.default_branch || 'main',
+          fork_branch: r.default_branch || 'main',
+          status: (r.drift_status as any) || (r.behind_by ? 'behind' : r.ahead_by ? 'ahead' : 'up_to_date'),
+          behind_by: r.behind_by || 0,
+          ahead_by: r.ahead_by || 0,
+        };
       }
-    };
-
-    prefetchForkStatuses();
-    return () => {
-      isMounted = false;
-    };
+    }
+    if (Object.keys(initialStatuses).length > 0) {
+      setForkSyncStatuses((prev) => ({ ...initialStatuses, ...prev }));
+    }
   }, [repos]);
 
   // Keyboard shortcut listener
@@ -230,6 +232,51 @@ export default function App() {
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
   }, [fetchSession, loadGitHubData]);
+
+  // Server-side SQLite FTS5 & Hybrid Semantic Search debounced fetcher
+  useEffect(() => {
+    const trimmed = filters.search.trim();
+    if (!trimmed) {
+      setSearchResults(null);
+      setSearchLatency(null);
+      return;
+    }
+
+    let isMounted = true;
+    setIsSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const mode = filters.searchMode || 'hybrid';
+        const res = await api.search.query(trimmed, mode);
+        if (isMounted) {
+          setSearchResults(res.results);
+          setSearchLatency(res.latencyMs);
+        }
+      } catch (err) {
+        console.warn('Search query failed, falling back to client-side filter:', err);
+      } finally {
+        if (isMounted) setIsSearching(false);
+      }
+    }, 120);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [filters.search, filters.searchMode]);
+
+  // Re-index embeddings trigger
+  const handleReindexEmbeddings = async () => {
+    setIsReindexing(true);
+    try {
+      const res = await api.search.reindex();
+      addToast('success', 'Vectors Re-indexed', res.message || 'Computed embeddings for all repositories.');
+    } catch (err: any) {
+      addToast('error', 'Re-index Failed', err.message);
+    } finally {
+      setIsReindexing(false);
+    }
+  };
 
   // PAT login
   const handlePatLogin = async (token: string): Promise<boolean> => {
@@ -473,20 +520,22 @@ export default function App() {
     return Array.from(langs).sort();
   }, [repos]);
 
-  // Filtered and Sorted Main Repositories
+  // Filtered and Sorted Main Repositories (Server-backed FTS5 / Hybrid Search with client fallback)
   const filteredRepos = useMemo(() => {
-    return repos
-      .filter((repo) => {
-        // Search
-        const searchLower = filters.search.toLowerCase();
-        const matchesSearch =
-          !filters.search ||
-          repo.name.toLowerCase().includes(searchLower) ||
-          repo.full_name.toLowerCase().includes(searchLower) ||
-          (repo.description && repo.description.toLowerCase().includes(searchLower)) ||
-          (repo.topics && repo.topics.some((t) => t.toLowerCase().includes(searchLower)));
+    const sourceList = (filters.search && searchResults !== null) ? searchResults : repos;
 
-        if (!matchesSearch) return false;
+    return sourceList
+      .filter((repo) => {
+        // If server search was not used or in offline fallback, check substring
+        if (filters.search && searchResults === null) {
+          const searchLower = filters.search.toLowerCase();
+          const matchesSearch =
+            repo.name.toLowerCase().includes(searchLower) ||
+            repo.full_name.toLowerCase().includes(searchLower) ||
+            (repo.description && repo.description.toLowerCase().includes(searchLower)) ||
+            (repo.topics && repo.topics.some((t) => t.toLowerCase().includes(searchLower)));
+          if (!matchesSearch) return false;
+        }
 
         // Visibility
         if (filters.visibility === 'public' && repo.private) return false;
@@ -509,6 +558,11 @@ export default function App() {
         return true;
       })
       .sort((a, b) => {
+        // If searching with Hybrid / FTS5 without explicit non-default sort, preserve relevance ranking!
+        if (filters.search && searchResults !== null && filters.sort === 'pushed_desc') {
+          return 0;
+        }
+
         if (filters.sort === 'pushed_desc') {
           return new Date(b.pushed_at).getTime() - new Date(a.pushed_at).getTime();
         }
@@ -522,17 +576,29 @@ export default function App() {
           return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
         }
         if (filters.sort === 'stars_desc') {
-          return b.stargazers_count - a.stargazers_count;
+          return (b.stargazers_count || 0) - (a.stargazers_count || 0);
+        }
+        if (filters.sort === 'stars_asc') {
+          return (a.stargazers_count || 0) - (b.stargazers_count || 0);
         }
         if (filters.sort === 'size_desc') {
-          return b.size - a.size;
+          return (b.size || 0) - (a.size || 0);
+        }
+        if (filters.sort === 'size_asc') {
+          return (a.size || 0) - (b.size || 0);
         }
         if (filters.sort === 'name_asc') {
           return a.name.localeCompare(b.name);
         }
+        if (filters.sort === 'name_desc') {
+          return b.name.localeCompare(a.name);
+        }
+        if (filters.sort === 'forks_desc') {
+          return (b.forks_count || 0) - (a.forks_count || 0);
+        }
         return 0;
       });
-  }, [repos, filters]);
+  }, [repos, searchResults, filters]);
 
   const selectedForksCount = useMemo(() => {
     return repos.filter((r) => selectedRepoIds.has(r.id) && r.fork).length;
@@ -560,7 +626,7 @@ export default function App() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <main className="flex-1 max-w-[1720px] 2xl:max-w-[1840px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* Demo Mode / Connect Quick Notification Strip */}
         {isDemo && (
           <div className="bg-white dark:bg-[#161b22] border-2 border-[#1a1a1a] dark:border-[#30363d] rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-[4px_4px_0_#1a1a1a]">
@@ -594,6 +660,9 @@ export default function App() {
               filteredCount={filteredRepos.length}
               viewMode={viewMode}
               setViewMode={setViewMode}
+              searchLatency={searchLatency}
+              onReindexEmbeddings={handleReindexEmbeddings}
+              isReindexing={isReindexing}
             />
 
             {/* Repository List / Table / Grid */}
@@ -625,6 +694,8 @@ export default function App() {
                 forkSyncStatuses={forkSyncStatuses}
                 syncingForkIds={syncingForkIds}
                 onOpenDrawer={(r) => setDrawerRepo(r)}
+                currentSort={filters.sort}
+                onSortChange={(newSort) => setFilters((prev) => ({ ...prev, sort: newSort }))}
               />
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

@@ -1,4 +1,5 @@
-import { useState, useEffect, Fragment } from 'react';
+import { useState, useEffect, useRef, Fragment } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { 
   GitFork, 
   Lock, 
@@ -15,9 +16,14 @@ import {
   Copy, 
   Check, 
   RefreshCw, 
-  SlidersHorizontal 
+  SlidersHorizontal,
+  Sparkles,
+  Zap,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown
 } from 'lucide-react';
-import { GitHubRepo, RepoDetailsData, ForkSyncStatus } from '../types';
+import { GitHubRepo, RepoDetailsData, ForkSyncStatus, FilterOptions } from '../types';
 import { formatAge, formatRelativeTime, getActivityLevel, formatRepoSize, getLanguageColor } from '../utils/github';
 import { api } from '../services/api';
 
@@ -33,6 +39,8 @@ interface RepoTableViewProps {
   forkSyncStatuses?: Record<number, ForkSyncStatus>;
   syncingForkIds?: Set<number>;
   onOpenDrawer?: (repo: GitHubRepo) => void;
+  currentSort?: FilterOptions['sort'];
+  onSortChange?: (sort: FilterOptions['sort']) => void;
 }
 
 // Inline Expanded Row Details Component
@@ -122,181 +130,97 @@ function InlineRepoDetails({
           )}
         </div>
 
-        <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-          {repo.fork && (
-            <>
-              {isSyncing ? (
-                <span className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#fffef2] dark:bg-[#21262d] border-2 border-[#1a1a1a] dark:border-[#30363d] text-[#1a1a1a] dark:text-[#f0f6fc] text-xs font-space font-bold shadow-[2px_2px_0_#1a1a1a]">
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#ff6b6b] stroke-[2.5]" />
-                  <span>Syncing...</span>
-                </span>
-              ) : forkSyncStatus?.status === 'up_to_date' ? (
-                <span
-                  id={`inline-synced-badge-${repo.id}`}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#10b981]/20 border-2 border-[#10b981] text-[#065f46] dark:text-[#39d353] text-xs font-space font-bold shadow-[2px_2px_0_#1a1a1a]"
-                  title="Fork is in sync with upstream"
-                >
-                  <Check className="w-3.5 h-3.5 stroke-[3]" />
-                  <span>Up to Date (In Sync)</span>
-                </span>
-              ) : forkSyncStatus?.status === 'behind' ? (
-                <button
-                  id={`inline-sync-btn-${repo.id}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (onDirectSync) onDirectSync(repo);
-                    else if (onSyncClick) onSyncClick(repo);
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#ffcc5c] dark:bg-[#f0883e] hover:bg-[#ffbe3b] border-2 border-[#1a1a1a] dark:border-[#30363d] text-[#1a1a1a] dark:text-[#1a1a1a] text-xs font-space font-extrabold shadow-[2px_2px_0_#1a1a1a] active:translate-x-0.5 active:translate-y-0.5 transition cursor-pointer"
-                  title={`Fast-forward ${forkSyncStatus.behind_by} commits behind upstream`}
-                >
-                  <GitFork className="w-3.5 h-3.5 stroke-[2.5]" />
-                  <span>Sync Upstream (-{forkSyncStatus.behind_by})</span>
-                </button>
-              ) : onSyncClick ? (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (onDirectSync) onDirectSync(repo);
-                    else onSyncClick(repo);
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#ffcc5c] dark:bg-[#f0883e] hover:bg-[#ffbe3b] border-2 border-[#1a1a1a] dark:border-[#30363d] text-[#1a1a1a] dark:text-[#1a1a1a] text-xs font-space font-extrabold shadow-[2px_2px_0_#1a1a1a] active:translate-x-0.5 active:translate-y-0.5 transition cursor-pointer"
-                >
-                  <GitFork className="w-3.5 h-3.5 stroke-[2.5]" />
-                  <span>Sync Upstream</span>
-                </button>
-              ) : null}
-            </>
-          )}
-
+        <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={copyClone}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#fffef2] dark:bg-[#21262d] hover:bg-[#ffcc5c] dark:hover:bg-[#30363d] border-2 border-[#1a1a1a] dark:border-[#30363d] text-[#1a1a1a] dark:text-[#f0f6fc] text-xs font-space font-bold shadow-[2px_2px_0_#1a1a1a] active:translate-x-0.5 active:translate-y-0.5 transition cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border-2 border-[#1a1a1a] dark:border-[#30363d] bg-[#fffef2] dark:bg-[#21262d] hover:bg-[#ffcc5c] dark:hover:bg-[#f0883e] dark:hover:text-black text-[#1a1a1a] dark:text-[#f0f6fc] text-xs font-space font-bold shadow-[2px_2px_0_#1a1a1a] transition cursor-pointer"
           >
-            {copied ? (
-              <>
-                <Check className="w-3.5 h-3.5 text-[#10b981] stroke-[2.5]" />
-                <span className="text-[#065f46] dark:text-[#39d353]">Copied!</span>
-              </>
-            ) : (
-              <>
-                <Terminal className="w-3.5 h-3.5 stroke-[2.5]" />
-                <span>git clone</span>
-                <Copy className="w-3 h-3 text-[#666] dark:text-[#8b949e]" />
-              </>
-            )}
+            {copied ? <Check className="w-3.5 h-3.5 text-green-600 stroke-[3]" /> : <Copy className="w-3.5 h-3.5 stroke-[2.5]" />}
+            <span>{copied ? 'Copied' : 'Clone URL'}</span>
           </button>
 
           {onOpenDrawer && (
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenDrawer(repo);
-              }}
-              className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-[#4ecdc4] dark:bg-[#39d353] hover:bg-[#38b2ac] border-2 border-[#1a1a1a] dark:border-[#30363d] text-[#1a1a1a] text-xs font-space font-extrabold shadow-[2px_2px_0_#1a1a1a] active:translate-x-0.5 active:translate-y-0.5 transition cursor-pointer"
+              onClick={() => onOpenDrawer(repo)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border-2 border-[#1a1a1a] dark:border-[#30363d] bg-[#4ecdc4] dark:bg-[#39d353] text-[#1a1a1a] text-xs font-space font-bold shadow-[2px_2px_0_#1a1a1a] transition cursor-pointer hover:bg-[#3db8af]"
             >
               <SlidersHorizontal className="w-3.5 h-3.5 stroke-[2.5]" />
-              <span>Full Slide-over Panel</span>
+              <span>Full Drawer</span>
             </button>
           )}
         </div>
       </div>
 
-      {loading ? (
-        <div className="py-6 text-center space-y-2">
-          <RefreshCw className="w-6 h-6 animate-spin text-[#ff6b6b] mx-auto stroke-[2.5]" />
-          <p className="font-space font-bold text-xs text-[#1a1a1a] dark:text-[#f0f6fc]">Fetching language percentages and contributors...</p>
+      {/* Loading state */}
+      {loading && (
+        <div className="flex items-center justify-center py-6 gap-2 text-xs font-space text-[#666] dark:text-[#8b949e]">
+          <RefreshCw className="w-4 h-4 animate-spin stroke-[2.5] text-[#ff6b6b]" />
+          <span>Fetching languages, contributors and telemetry...</span>
         </div>
-      ) : error ? (
-        <div className="p-3 bg-[#ff6b6b]/15 border-2 border-[#ff6b6b] rounded-xl text-xs font-space text-[#9f1239] dark:text-[#ff7b72]">
-          Failed to load live language details ({error}). You can still use quick actions or inspect the repository.
+      )}
+
+      {/* Error state */}
+      {error && !loading && (
+        <div className="p-3 bg-red-50 dark:bg-red-950/30 border-2 border-red-500 rounded-xl text-xs text-red-700 dark:text-red-400 font-space font-medium">
+          Failed to load live repository details: {error}
         </div>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          {/* Column 1: Languages Breakdown (7 cols) */}
-          <div className="lg:col-span-7 bg-white dark:bg-[#161b22] p-3.5 rounded-xl border-2 border-[#1a1a1a] dark:border-[#30363d] shadow-[2px_2px_0_#1a1a1a] space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 font-space font-bold text-xs text-[#1a1a1a] dark:text-[#f0f6fc]">
-                <Code2 className="w-4 h-4 text-[#ff6b6b] stroke-[2.5]" />
-                <span>Primary Language Percentages</span>
-              </div>
-              <span className="font-space text-[11px] text-[#666] dark:text-[#8b949e]">
-                Footprint: <strong className="text-[#1a1a1a] dark:text-[#f0f6fc]">{formatRepoSize(details?.totalBytes ? Math.round(details.totalBytes / 1024) : repo.size)}</strong>
-              </span>
+      )}
+
+      {/* Details Grid */}
+      {!loading && !error && details && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Languages Breakdown */}
+          <div className="bg-white dark:bg-[#161b22] p-3.5 rounded-xl border-2 border-[#1a1a1a] dark:border-[#30363d] shadow-[2px_2px_0_#1a1a1a]">
+            <div className="flex items-center gap-1.5 text-xs font-bold font-space text-[#1a1a1a] dark:text-[#f0f6fc] mb-2.5">
+              <Code2 className="w-4 h-4 stroke-[2.5] text-[#ff6b6b]" />
+              <span>LANGUAGES ({languages.length})</span>
             </div>
 
             {languages.length > 0 ? (
-              <>
-                <div className="h-3 w-full rounded-md overflow-hidden border-2 border-[#1a1a1a] dark:border-[#30363d] flex bg-[#fffef2] dark:bg-[#0d1117] shadow-[1px_1px_0_#1a1a1a]">
-                  {languages.map((lang) => (
+              <div className="space-y-2">
+                {/* Progress Bar */}
+                <div className="h-2.5 w-full bg-neutral-200 dark:bg-neutral-800 rounded-full overflow-hidden flex border border-[#1a1a1a] dark:border-[#30363d]">
+                  {languages.map((l) => (
                     <div
-                      key={lang.name}
-                      style={{
-                        width: `${Math.max(lang.percentage, 1)}%`,
-                        backgroundColor: lang.color,
-                      }}
-                      className="h-full"
-                      title={`${lang.name}: ${lang.percentage.toFixed(1)}% (${formatRepoSize(Math.round(lang.bytes / 1024))})`}
+                      key={l.name}
+                      style={{ width: `${l.percentage}%`, backgroundColor: l.color }}
+                      title={`${l.name}: ${l.percentage.toFixed(1)}%`}
                     />
                   ))}
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
-                  {languages.map((lang) => (
-                    <div key={lang.name} className="flex items-center gap-1.5 text-xs font-space">
-                      <span
-                        className="w-2.5 h-2.5 rounded-full shrink-0 border border-black/30 dark:border-white/30"
-                        style={{ backgroundColor: lang.color }}
-                      />
-                      <span className="font-bold text-[#1a1a1a] dark:text-[#f0f6fc] truncate">{lang.name}</span>
-                      <span className="text-[#666] dark:text-[#8b949e] text-[10px] shrink-0">
-                        {lang.percentage < 1 ? '<1%' : `${Math.round(lang.percentage)}%`}
-                      </span>
+                {/* Percentage Chips */}
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {languages.slice(0, 5).map((l) => (
+                    <div key={l.name} className="flex items-center gap-1.5 text-[11px] font-space font-bold text-[#1a1a1a] dark:text-[#f0f6fc]">
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: l.color }} />
+                      <span>{l.name}</span>
+                      <span className="text-[#666] dark:text-[#8b949e] font-normal font-mono">{l.percentage.toFixed(1)}%</span>
                     </div>
                   ))}
                 </div>
-              </>
+              </div>
             ) : (
-              <p className="text-xs text-[#888] dark:text-[#8b949e] font-space">No language byte breakdown reported by GitHub.</p>
+              <p className="text-xs text-[#888] dark:text-[#8b949e] font-space">No language byte telemetry available.</p>
             )}
           </div>
 
-          {/* Column 2: Contributors (5 cols) */}
-          <div className="lg:col-span-5 bg-white dark:bg-[#161b22] p-3.5 rounded-xl border-2 border-[#1a1a1a] dark:border-[#30363d] shadow-[2px_2px_0_#1a1a1a] space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 font-space font-bold text-xs text-[#1a1a1a] dark:text-[#f0f6fc]">
-                <Users className="w-4 h-4 text-[#4ecdc4] stroke-[2.5]" />
-                <span>Top Active Contributors</span>
-              </div>
-              <span className="font-space text-[11px] text-[#666] dark:text-[#8b949e]">
-                {details?.contributors ? `${details.contributors.length} tracked` : ''}
-              </span>
+          {/* Top Contributors */}
+          <div className="bg-white dark:bg-[#161b22] p-3.5 rounded-xl border-2 border-[#1a1a1a] dark:border-[#30363d] shadow-[2px_2px_0_#1a1a1a]">
+            <div className="flex items-center gap-1.5 text-xs font-bold font-space text-[#1a1a1a] dark:text-[#f0f6fc] mb-2.5">
+              <Users className="w-4 h-4 stroke-[2.5] text-[#4ecdc4]" />
+              <span>ROSTER ({details.contributors.length})</span>
             </div>
 
-            {details?.contributors && details.contributors.length > 0 ? (
-              <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
-                {details.contributors.slice(0, 5).map((c) => (
+            {details.contributors.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {details.contributors.slice(0, 6).map((c) => (
                   <div
                     key={c.id}
-                    className="flex items-center justify-between gap-2 p-1.5 rounded-lg bg-[#fffef2] dark:bg-[#21262d] border border-[#1a1a1a] dark:border-[#30363d] text-xs font-space"
+                    className="flex items-center gap-1.5 bg-[#fffef2] dark:bg-[#21262d] border border-[#1a1a1a] dark:border-[#30363d] rounded-lg p-1 pr-2 shadow-[1px_1px_0_#1a1a1a]"
                   >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <img
-                        src={c.avatar_url}
-                        alt={c.login}
-                        className="w-5 h-5 rounded-md border border-[#1a1a1a] dark:border-[#30363d] shrink-0"
-                      />
-                      <a
-                        href={c.html_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="font-bold text-[#1a1a1a] dark:text-[#f0f6fc] hover:text-[#ff6b6b] truncate flex items-center gap-1"
-                      >
-                        <span className="truncate">{c.login}</span>
-                        <ExternalLink className="w-2.5 h-2.5 shrink-0" />
-                      </a>
-                    </div>
+                    <img src={c.avatar_url} alt={c.login} className="w-5 h-5 rounded-full border border-[#1a1a1a] dark:border-[#30363d]" />
+                    <span className="text-xs font-bold font-space text-[#1a1a1a] dark:text-[#f0f6fc]">{c.login}</span>
                     <span className="px-1.5 py-0.5 rounded bg-white dark:bg-[#161b22] border border-[#1a1a1a] dark:border-[#30363d] text-[10px] font-bold text-[#065f46] dark:text-[#39d353]">
                       {c.contributions} {c.contributions === 1 ? 'commit' : 'commits'}
                     </span>
@@ -325,12 +249,23 @@ export function RepoTableView({
   forkSyncStatuses,
   syncingForkIds,
   onOpenDrawer,
+  currentSort = 'pushed_desc',
+  onSortChange,
 }: RepoTableViewProps) {
   const [expandedRepoId, setExpandedRepoId] = useState<number | null>(null);
   const [highlightedIndex, setHighlightedIndex] = useState<number | null>(repos.length > 0 ? 0 : null);
+  const parentRef = useRef<HTMLDivElement>(null);
 
   const allSelected = repos.length > 0 && repos.every((r) => selectedIds.has(r.id));
   const isPartiallySelected = !allSelected && repos.some((r) => selectedIds.has(r.id));
+
+  // TanStack Row Virtualizer for 60 FPS Table Rendering with 500+ items
+  const rowVirtualizer = useVirtualizer({
+    count: repos.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 58,
+    overscan: 8,
+  });
 
   // Reset or constrain highlightedIndex if repos list changes
   useEffect(() => {
@@ -360,22 +295,14 @@ export function RepoTableView({
         e.preventDefault();
         setHighlightedIndex((prev) => {
           const nextIndex = prev === null ? 0 : Math.min(repos.length - 1, prev + 1);
-          const targetRepo = repos[nextIndex];
-          if (targetRepo) {
-            const el = document.getElementById(`repo-row-${targetRepo.id}`);
-            el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-          }
+          rowVirtualizer.scrollToIndex(nextIndex, { align: 'auto' });
           return nextIndex;
         });
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         setHighlightedIndex((prev) => {
           const nextIndex = prev === null ? 0 : Math.max(0, prev - 1);
-          const targetRepo = repos[nextIndex];
-          if (targetRepo) {
-            const el = document.getElementById(`repo-row-${targetRepo.id}`);
-            el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-          }
+          rowVirtualizer.scrollToIndex(nextIndex, { align: 'auto' });
           return nextIndex;
         });
       } else if (e.key === ' ' || e.code === 'Space') {
@@ -398,7 +325,39 @@ export function RepoTableView({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [repos, highlightedIndex, onToggleSelect, onOpenDrawer]);
+  }, [repos, highlightedIndex, onToggleSelect, onOpenDrawer, rowVirtualizer]);
+
+  // Column sort toggler helper
+  const handleColumnSort = (column: 'name' | 'pushed' | 'created' | 'stars') => {
+    if (!onSortChange) return;
+
+    if (column === 'name') {
+      onSortChange(currentSort === 'name_asc' ? 'name_desc' : 'name_asc');
+    } else if (column === 'pushed') {
+      onSortChange(currentSort === 'pushed_desc' ? 'pushed_asc' : 'pushed_desc');
+    } else if (column === 'created') {
+      onSortChange(currentSort === 'created_desc' ? 'created_asc' : 'created_desc');
+    } else if (column === 'stars') {
+      onSortChange(currentSort === 'stars_desc' ? 'stars_asc' : 'stars_desc');
+    }
+  };
+
+  const getSortIcon = (column: 'name' | 'pushed' | 'created' | 'stars') => {
+    if (column === 'name') {
+      if (currentSort === 'name_asc') return <ArrowUp className="w-3.5 h-3.5 text-[#ff6b6b] stroke-[3]" />;
+      if (currentSort === 'name_desc') return <ArrowDown className="w-3.5 h-3.5 text-[#ff6b6b] stroke-[3]" />;
+    } else if (column === 'pushed') {
+      if (currentSort === 'pushed_desc') return <ArrowDown className="w-3.5 h-3.5 text-[#ff6b6b] stroke-[3]" />;
+      if (currentSort === 'pushed_asc') return <ArrowUp className="w-3.5 h-3.5 text-[#ff6b6b] stroke-[3]" />;
+    } else if (column === 'created') {
+      if (currentSort === 'created_desc') return <ArrowDown className="w-3.5 h-3.5 text-[#ff6b6b] stroke-[3]" />;
+      if (currentSort === 'created_asc') return <ArrowUp className="w-3.5 h-3.5 text-[#ff6b6b] stroke-[3]" />;
+    } else if (column === 'stars') {
+      if (currentSort === 'stars_desc') return <ArrowDown className="w-3.5 h-3.5 text-[#ff6b6b] stroke-[3]" />;
+      if (currentSort === 'stars_asc') return <ArrowUp className="w-3.5 h-3.5 text-[#ff6b6b] stroke-[3]" />;
+    }
+    return <ArrowUpDown className="w-3 h-3 text-[#888] opacity-0 group-hover/th:opacity-100 transition" />;
+  };
 
   const activityTagStyles: Record<string, string> = {
     active: 'bg-[#10b981]/20 text-[#065f46] dark:text-[#39d353] border-[#10b981]',
@@ -408,11 +367,18 @@ export function RepoTableView({
     dormant: 'bg-[#ff6b6b]/20 text-[#9f1239] dark:text-[#ff7b72] border-[#ff6b6b]',
   };
 
+  const virtualRows = rowVirtualizer.getVirtualItems();
+
   return (
     <div className="bg-white dark:bg-[#161b22] border-[3px] border-[#1a1a1a] dark:border-[#30363d] rounded-2xl overflow-hidden shadow-[6px_6px_0_#1a1a1a] dark:shadow-[6px_6px_0_#000000] transition">
-      <div className="overflow-x-auto">
+      {/* Scrollable Container with Virtualizer Ref */}
+      <div 
+        ref={parentRef} 
+        className="overflow-x-auto max-h-[72vh] overflow-y-auto"
+        style={{ scrollbarGutter: 'stable' }}
+      >
         <table className="w-full text-left border-collapse">
-          <thead>
+          <thead className="sticky top-0 z-20 shadow-sm">
             <tr className="border-b-[3px] border-[#1a1a1a] dark:border-[#30363d] bg-[#fffef2] dark:bg-[#0d1117] text-xs font-space font-bold text-[#1a1a1a] dark:text-[#f0f6fc] select-none">
               <th className="py-2.5 px-2 sm:px-3 w-9 sm:w-10 text-center">
                 <input
@@ -429,17 +395,83 @@ export function RepoTableView({
               <th className="py-2.5 px-1 sm:px-2 w-7 sm:w-8 text-center" title="Expand row for language & contributor insights">
                 <ChevronDown className="w-4 h-4 text-[#888] dark:text-[#8b949e] mx-auto" />
               </th>
-              <th className="py-2.5 px-2.5 sm:px-3">REPOSITORY</th>
-              <th className="py-2.5 px-2 sm:px-2.5">ACTIVITY</th>
-              <th className="py-2.5 px-2 sm:px-2.5">LANGUAGE</th>
-              <th className="py-2.5 px-2 sm:px-2.5">CREATED / AGE</th>
-              <th className="py-2.5 px-2 sm:px-2.5">LAST PUSH</th>
-              <th className="py-2.5 px-2 sm:px-2.5 text-right">STATS</th>
-              <th className="py-2.5 px-2 sm:px-3 text-right">ACTIONS</th>
+              
+              {/* Repository Name Header (Sortable) */}
+              <th 
+                className="py-2.5 px-2.5 sm:px-3 cursor-pointer group/th hover:bg-[#fffae0] dark:hover:bg-[#21262d] transition"
+                onClick={() => handleColumnSort('name')}
+                title="Sort by Name (A-Z / Z-A)"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>REPOSITORY</span>
+                  {getSortIcon('name')}
+                </div>
+              </th>
+
+              {/* Activity Header */}
+              <th className="py-2.5 px-2 sm:px-2.5 whitespace-nowrap">
+                <span>ACTIVITY</span>
+              </th>
+
+              {/* Language Header */}
+              <th className="py-2.5 px-2 sm:px-2.5 whitespace-nowrap">
+                <span>LANGUAGE</span>
+              </th>
+
+              {/* Created Date Header (Sortable) */}
+              <th 
+                className="py-2.5 px-2 sm:px-2.5 whitespace-nowrap cursor-pointer group/th hover:bg-[#fffae0] dark:hover:bg-[#21262d] transition"
+                onClick={() => handleColumnSort('created')}
+                title="Sort by Creation Age (Newest / Oldest)"
+              >
+                <div className="flex items-center gap-1">
+                  <span>CREATED</span>
+                  {getSortIcon('created')}
+                </div>
+              </th>
+
+              {/* Last Push Header (Sortable) */}
+              <th 
+                className="py-2.5 px-2 sm:px-2.5 whitespace-nowrap cursor-pointer group/th hover:bg-[#fffae0] dark:hover:bg-[#21262d] transition"
+                onClick={() => handleColumnSort('pushed')}
+                title="Sort by Last Push (Recent / Stale)"
+              >
+                <div className="flex items-center gap-1">
+                  <span>LAST PUSH</span>
+                  {getSortIcon('pushed')}
+                </div>
+              </th>
+
+              {/* Stats Header (Sortable) */}
+              <th 
+                className="py-2.5 px-2 sm:px-2.5 text-right whitespace-nowrap cursor-pointer group/th hover:bg-[#fffae0] dark:hover:bg-[#21262d] transition"
+                onClick={() => handleColumnSort('stars')}
+                title="Sort by Stars & Metrics"
+              >
+                <div className="flex items-center justify-end gap-1">
+                  <span>STATS</span>
+                  {getSortIcon('stars')}
+                </div>
+              </th>
+
+              {/* Actions Header */}
+              <th className="py-2.5 px-2 sm:px-3 text-right whitespace-nowrap">ACTIONS</th>
             </tr>
           </thead>
-          <tbody className="divide-y-2 divide-dashed divide-[#1a1a1a]/15 dark:divide-white/10 text-xs">
-            {repos.map((repo, index) => {
+          
+          <tbody className="divide-y-2 divide-dashed divide-[#1a1a1a]/15 dark:divide-white/10 text-xs relative">
+            {/* Top Virtual Spacer */}
+            {virtualRows.length > 0 && (
+              <tr>
+                <td colSpan={9} style={{ height: `${virtualRows[0].start}px`, padding: 0, border: 'none' }} />
+              </tr>
+            )}
+
+            {virtualRows.map((virtualRow) => {
+              const repo = repos[virtualRow.index];
+              if (!repo) return null;
+
+              const index = virtualRow.index;
               const isSelected = selectedIds.has(repo.id);
               const isExpanded = expandedRepoId === repo.id;
               const isHighlighted = highlightedIndex === index;
@@ -455,6 +487,8 @@ export function RepoTableView({
                 <Fragment key={repo.id}>
                   <tr
                     id={`repo-row-${repo.id}`}
+                    data-index={virtualRow.index}
+                    ref={rowVirtualizer.measureElement}
                     tabIndex={0}
                     aria-selected={isSelected}
                     onMouseEnter={() => setHighlightedIndex(index)}
@@ -519,7 +553,7 @@ export function RepoTableView({
                     </td>
 
                     {/* Repository Name & Badges */}
-                    <td className="py-2.5 px-2.5 sm:px-3 min-w-[160px] md:min-w-[190px] lg:min-w-[210px] xl:min-w-[240px]">
+                    <td className="py-2.5 px-2.5 sm:px-3 min-w-[170px] max-w-[340px]">
                       <div className="flex items-start gap-2 min-w-0">
                         <div className="mt-0.5 shrink-0 text-[#1a1a1a] dark:text-[#f0f6fc]">
                           {repo.fork ? (
@@ -574,11 +608,31 @@ export function RepoTableView({
                                   Archived
                                 </span>
                               )}
+
+                              {/* Search Match Telemetry Badge */}
+                              {repo._matchType === 'hybrid' && (
+                                <span className="text-[9px] font-space font-bold px-1.5 py-0.2 rounded border border-purple-500 bg-purple-500/20 text-purple-700 dark:text-purple-300 inline-flex items-center gap-0.5" title="Ranked via Reciprocal Rank Fusion of FTS5 + Semantic Vector">
+                                  <Sparkles className="w-2.5 h-2.5" />
+                                  Hybrid
+                                </span>
+                              )}
+                              {repo._matchType === 'semantic' && (
+                                <span className="text-[9px] font-space font-bold px-1.5 py-0.2 rounded border border-indigo-500 bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 inline-flex items-center gap-0.5" title={`Semantic similarity match: ${Math.round((repo._similarity || 0) * 100)}%`}>
+                                  <Sparkles className="w-2.5 h-2.5" />
+                                  AI Match
+                                </span>
+                              )}
+                              {repo._matchType === 'fts5' && (
+                                <span className="text-[9px] font-space font-bold px-1.5 py-0.2 rounded border border-amber-500 bg-amber-500/20 text-amber-700 dark:text-amber-300 inline-flex items-center gap-0.5" title="Exact token match via SQLite FTS5">
+                                  <Zap className="w-2.5 h-2.5" />
+                                  FTS5
+                                </span>
+                              )}
                             </div>
                           </div>
 
                           {repo.description ? (
-                            <p className="text-xs text-[#555] dark:text-[#8b949e] truncate mt-0.5 max-w-[260px] xl:max-w-md font-normal">
+                            <p className="text-xs text-[#555] dark:text-[#8b949e] truncate mt-0.5 max-w-[280px] xl:max-w-md font-normal">
                               {repo.description}
                             </p>
                           ) : null}
@@ -767,11 +821,25 @@ export function RepoTableView({
                 </Fragment>
               );
             })}
+
+            {/* Bottom Virtual Spacer */}
+            {virtualRows.length > 0 && (
+              <tr>
+                <td 
+                  colSpan={9} 
+                  style={{ 
+                    height: `${rowVirtualizer.getTotalSize() - (virtualRows[virtualRows.length - 1]?.end || 0)}px`, 
+                    padding: 0, 
+                    border: 'none' 
+                  }} 
+                />
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
 
-      {/* Keyboard Shortcuts Hint Bar */}
+      {/* Keyboard Shortcuts & Telemetry Hint Bar */}
       <div className="border-t-[3px] border-[#1a1a1a] dark:border-[#30363d] bg-[#fffef2] dark:bg-[#0d1117] px-4 py-2 flex items-center justify-between text-xs font-space text-[#555] dark:text-[#8b949e] flex-wrap gap-2 select-none">
         <div className="flex items-center gap-3.5 flex-wrap">
           <span className="flex items-center gap-1 font-bold text-[#1a1a1a] dark:text-[#f0f6fc]">
@@ -789,12 +857,17 @@ export function RepoTableView({
           </span>
         </div>
 
-        {highlightedIndex !== null && repos[highlightedIndex] && (
-          <div className="text-[11px] font-bold text-[#1a1a1a] dark:text-[#f0f6fc]">
-            Focused: <span className="text-[#ff6b6b] dark:text-[#ff7b72] underline decoration-2">{repos[highlightedIndex].name}</span>{' '}
-            <span className="text-[#777] dark:text-[#8b949e] font-normal font-mono">({highlightedIndex + 1}/{repos.length})</span>
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          <span className="text-[10px] font-space text-[#888] dark:text-[#8b949e] font-bold">
+            Virtual Table (60 FPS)
+          </span>
+          {highlightedIndex !== null && repos[highlightedIndex] && (
+            <div className="text-[11px] font-bold text-[#1a1a1a] dark:text-[#f0f6fc]">
+              Focused: <span className="text-[#ff6b6b] dark:text-[#ff7b72] underline decoration-2">{repos[highlightedIndex].name}</span>{' '}
+              <span className="text-[#777] dark:text-[#8b949e] font-normal font-mono">({highlightedIndex + 1}/{repos.length})</span>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

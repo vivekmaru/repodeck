@@ -172,4 +172,26 @@ export const api = {
       return handleResponse<{ success: boolean; message: string }>(res);
     },
   },
+
+  search: {
+    async query(q: string, mode: 'hybrid' | 'fts' | 'semantic' = 'hybrid', limit = 50): Promise<{
+      query: string;
+      mode: 'hybrid' | 'fts' | 'semantic';
+      latencyMs: number;
+      total: number;
+      results: GitHubRepo[];
+    }> {
+      const params = new URLSearchParams({
+        q,
+        mode,
+        limit: limit.toString(),
+      });
+      const res = await fetch(`/api/search?${params.toString()}`);
+      return handleResponse(res);
+    },
+    async reindex(): Promise<{ success: boolean; message: string; count: number }> {
+      const res = await fetch('/api/search/reindex', { method: 'POST' });
+      return handleResponse(res);
+    },
+  },
 };

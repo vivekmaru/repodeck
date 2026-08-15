@@ -51,8 +51,8 @@ export function Navbar({
   const isDemo = session?.authMethod === 'demo';
 
   return (
-    <header id="app-header" className="sticky top-0 z-40 bg-[#fffef2]/95 dark:bg-[#161b22]/95 backdrop-blur-sm border-b-[3px] border-[#1a1a1a] dark:border-[#30363d] px-4 sm:px-8 py-3.5 transition">
-      <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+    <header id="app-header" className="sticky top-0 z-40 bg-[#fffef2]/95 dark:bg-[#161b22]/95 backdrop-blur-sm border-b-[3px] border-[#1a1a1a] dark:border-[#30363d] px-4 sm:px-6 lg:px-8 py-3.5 transition">
+      <div className="max-w-[1720px] 2xl:max-w-[1840px] mx-auto flex items-center justify-between gap-4">
         {/* Brand & Tab Navigation */}
         <div className="flex items-center gap-6">
           {/* Logo Area */}

@@ -1,57 +1,118 @@
 import { Router } from 'express';
-import { getGitHubToken, callGitHubApi, fetchAllPages } from '../utils/githubApi.js';
+import { getGitHubToken, callGitHubApi, fetchAllPages, fetchReposGraphQL } from '../utils/githubApi.js';
 import { demoState } from '../data/demoState.js';
+import { stmts, bulkUpsertRepos, rowToRepo } from '../db/database.js';
+import { indexReposEmbeddings } from '../services/embeddings.js';
 
 export const reposRouter = Router();
 
-// 1. Get all repositories for user with multi-page support & fork enrichment
+// 1. Get all repositories for user (SQLite Cached + 1-Roundtrip GraphQL Batch Ingestion)
 reposRouter.get('/api/github/repos', async (req, res) => {
   const { token } = getGitHubToken(req);
   if (!token) return res.status(401).json({ error: 'Unauthorized. Please connect your GitHub account.' });
 
+  const userId = token === 'demo_token' ? 'demo_user' : token.slice(-8);
+
   if (token === 'demo_token') {
+    // Seed demo repositories into SQLite if not present
+    const existing = stmts.getUserRepos.all(userId) as any[];
+    if (existing.length === 0) {
+      bulkUpsertRepos(demoState.repos, userId);
+      indexReposEmbeddings(demoState.repos, userId);
+    }
     return res.json(demoState.repos);
   }
 
-  try {
-    const { items: repos } = await fetchAllPages(
-      '/user/repos?sort=pushed&affiliation=owner,collaborator',
-      token,
-      5 // Fetch up to 500 repos
-    );
+  // Fast Path: Check if we have recent SQLite cached repositories (< 5 minutes old)
+  const cachedRows = stmts.getUserRepos.all(userId) as any[];
+  const forceRefresh = req.query.refresh === 'true';
 
-    // Enhance forked repos with parent info if available
-    const enrichedRepos = await Promise.all(
-      repos.map(async (repo: any) => {
-        if (repo.fork && !repo.parent) {
-          try {
-            const { data: repoDetails } = await callGitHubApi(`/repos/${repo.owner.login}/${repo.name}`, token);
-            if (repoDetails && repoDetails.parent) {
-              return {
-                ...repo,
-                parent: {
-                  name: repoDetails.parent.name,
-                  full_name: repoDetails.parent.full_name,
-                  html_url: repoDetails.parent.html_url,
-                  default_branch: repoDetails.parent.default_branch,
-                  owner: {
-                    login: repoDetails.parent.owner?.login || '',
-                    avatar_url: repoDetails.parent.owner?.avatar_url || '',
-                    html_url: repoDetails.parent.owner?.html_url || '',
-                  },
-                },
-              };
-            }
-          } catch (e) {
-            // ignore individual repo detail error
+  if (cachedRows.length > 0 && !forceRefresh) {
+    const cachedRepos = cachedRows.map(rowToRepo);
+    // Return instant sub-millisecond cached result from SQLite
+    res.json(cachedRepos);
+
+    // Optional background synchronization if older than 5 mins
+    const newestSync = cachedRows[0]?.synced_at || 0;
+    if (Date.now() - newestSync > 5 * 60 * 1000) {
+      setTimeout(async () => {
+        try {
+          const { repos } = await fetchReposGraphQL(token);
+          if (repos.length > 0) {
+            bulkUpsertRepos(repos, userId);
+            indexReposEmbeddings(repos, userId);
           }
+        } catch {
+          // ignore background sync error
         }
-        return repo;
-      })
-    );
+      }, 50);
+    }
+    return;
+  }
+
+  try {
+    let enrichedRepos: any[] = [];
+
+    // Step 1: Attempt fast 1-roundtrip GraphQL query
+    try {
+      const graphqlResult = await fetchReposGraphQL(token, 5);
+      if (graphqlResult.repos && graphqlResult.repos.length > 0) {
+        enrichedRepos = graphqlResult.repos;
+      }
+    } catch (gqlErr) {
+      console.warn('GraphQL fetch fallback to REST:', gqlErr);
+    }
+
+    // Step 2: Fallback to REST multi-page fetcher if GraphQL wasn't available
+    if (enrichedRepos.length === 0) {
+      const { items: repos } = await fetchAllPages(
+        '/user/repos?sort=pushed&affiliation=owner,collaborator',
+        token,
+        5
+      );
+
+      enrichedRepos = await Promise.all(
+        repos.map(async (repo: any) => {
+          if (repo.fork && !repo.parent) {
+            try {
+              const { data: repoDetails } = await callGitHubApi(`/repos/${repo.owner.login}/${repo.name}`, token);
+              if (repoDetails && repoDetails.parent) {
+                return {
+                  ...repo,
+                  parent: {
+                    name: repoDetails.parent.name,
+                    full_name: repoDetails.parent.full_name,
+                    html_url: repoDetails.parent.html_url,
+                    default_branch: repoDetails.parent.default_branch,
+                    owner: {
+                      login: repoDetails.parent.owner?.login || '',
+                      avatar_url: repoDetails.parent.owner?.avatar_url || '',
+                      html_url: repoDetails.parent.owner?.html_url || '',
+                    },
+                  },
+                };
+              }
+            } catch (e) {
+              // ignore individual repo detail error
+            }
+          }
+          return repo;
+        })
+      );
+    }
+
+    // Step 3: Persist to SQLite & index embeddings in background
+    if (enrichedRepos.length > 0) {
+      bulkUpsertRepos(enrichedRepos, userId);
+      indexReposEmbeddings(enrichedRepos, userId);
+    }
 
     res.json(enrichedRepos);
   } catch (err: any) {
+    // If GitHub fails but we have offline SQLite cache, serve it
+    if (cachedRows.length > 0) {
+      return res.json(cachedRows.map(rowToRepo));
+    }
     res.status(500).json({ error: err.message });
   }
 });
@@ -149,7 +210,7 @@ function getDemoRepoDetails(owner: string, repo: string) {
   return { languages, totalBytes, contributors, recentCommits };
 }
 
-// 2. Get Repository Details (Languages breakdown, Contributors, Recent Commits)
+// 2. Get Repository Details (Languages breakdown, Contributors, Recent Commits) with ETag caching
 reposRouter.get('/api/github/repos/:owner/:repo/details', async (req, res) => {
   const { token } = getGitHubToken(req);
   const { owner, repo } = req.params;
@@ -220,7 +281,7 @@ reposRouter.get('/api/github/repos/:owner/:repo/details', async (req, res) => {
   }
 });
 
-// 3. Delete Repository (Destructive)
+// 3. Delete Repository (Destructive + SQLite Sync)
 reposRouter.delete('/api/github/repos/:owner/:repo', async (req, res) => {
   const { token } = getGitHubToken(req);
   const { owner, repo } = req.params;
@@ -229,8 +290,11 @@ reposRouter.delete('/api/github/repos/:owner/:repo', async (req, res) => {
     return res.status(401).json({ error: 'Unauthorized. Please connect your GitHub account.' });
   }
 
+  const userId = token === 'demo_token' ? 'demo_user' : token.slice(-8);
+
   if (token === 'demo_token') {
     demoState.repos = demoState.repos.filter((r) => !(r.owner.login === owner && r.name === repo));
+    stmts.deleteRepo.run(userId, owner, repo);
     return res.json({ success: true, message: `Repository ${owner}/${repo} was deleted from demo workspace.` });
   }
 
@@ -240,6 +304,7 @@ reposRouter.delete('/api/github/repos/:owner/:repo', async (req, res) => {
     });
 
     if (status === 204 || status === 200) {
+      stmts.deleteRepo.run(userId, owner, repo);
       return res.json({ success: true, message: `Repository ${owner}/${repo} successfully deleted.` });
     }
 
@@ -283,18 +348,22 @@ reposRouter.delete('/api/github/repos/:owner/:repo', async (req, res) => {
   }
 });
 
-// 4. Update / Toggle Archive Repository
+// 4. Update / Toggle Archive Repository + SQLite Sync
 reposRouter.patch('/api/github/repos/:owner/:repo', async (req, res) => {
   const { token } = getGitHubToken(req);
   const { owner, repo } = req.params;
   const { archived, description } = req.body;
 
   if (!token) return res.status(401).json({ error: 'Unauthorized.' });
+  const userId = token === 'demo_token' ? 'demo_user' : token.slice(-8);
 
   if (token === 'demo_token') {
     const found = demoState.repos.find((r) => r.owner.login === owner && r.name === repo);
     if (found) {
-      if (typeof archived === 'boolean') found.archived = archived;
+      if (typeof archived === 'boolean') {
+        found.archived = archived;
+        stmts.updateRepoArchived.run(archived ? 1 : 0, new Date().toISOString(), userId, owner, repo);
+      }
       if (typeof description === 'string') found.description = description;
       return res.json(found);
     }
@@ -313,6 +382,9 @@ reposRouter.patch('/api/github/repos/:owner/:repo', async (req, res) => {
     });
 
     if (status === 200) {
+      if (typeof archived === 'boolean') {
+        stmts.updateRepoArchived.run(archived ? 1 : 0, new Date().toISOString(), userId, owner, repo);
+      }
       return res.json(data);
     }
 
@@ -322,7 +394,7 @@ reposRouter.patch('/api/github/repos/:owner/:repo', async (req, res) => {
   }
 });
 
-// 5. Batch Delete Repositories
+// 5. Batch Delete Repositories + SQLite Sync
 reposRouter.post('/api/github/repos/batch-delete', async (req, res) => {
   const { token } = getGitHubToken(req);
   const { repos } = req.body; // Array of { owner: string, repo: string }
@@ -332,9 +404,14 @@ reposRouter.post('/api/github/repos/batch-delete', async (req, res) => {
     return res.status(400).json({ error: 'Array of repositories is required.' });
   }
 
+  const userId = token === 'demo_token' ? 'demo_user' : token.slice(-8);
+
   if (token === 'demo_token') {
     const toDeleteSet = new Set(repos.map((r) => `${r.owner}/${r.repo}`));
     demoState.repos = demoState.repos.filter((r) => !toDeleteSet.has(`${r.owner.login}/${r.name}`));
+    for (const r of repos) {
+      stmts.deleteRepo.run(userId, r.owner, r.repo);
+    }
     return res.json({
       success: true,
       deleted: repos.length,
@@ -349,6 +426,7 @@ reposRouter.post('/api/github/repos/batch-delete', async (req, res) => {
         method: 'DELETE',
       });
       if (status === 204 || status === 200) {
+        stmts.deleteRepo.run(userId, owner, repo);
         results.push({ owner, repo, success: true });
       } else {
         results.push({ owner, repo, success: false, error: data?.message || `Status ${status}` });
@@ -366,7 +444,7 @@ reposRouter.post('/api/github/repos/batch-delete', async (req, res) => {
   });
 });
 
-// 6. Batch Archive Repositories
+// 6. Batch Archive Repositories + SQLite Sync
 reposRouter.post('/api/github/repos/batch-archive', async (req, res) => {
   const { token } = getGitHubToken(req);
   const { repos, archived = true } = req.body; // Array of { owner: string, repo: string }
@@ -376,6 +454,8 @@ reposRouter.post('/api/github/repos/batch-archive', async (req, res) => {
     return res.status(400).json({ error: 'Array of repositories is required.' });
   }
 
+  const userId = token === 'demo_token' ? 'demo_user' : token.slice(-8);
+
   if (token === 'demo_token') {
     const toArchiveSet = new Set(repos.map((r) => `${r.owner}/${r.repo}`));
     demoState.repos.forEach((r) => {
@@ -383,6 +463,9 @@ reposRouter.post('/api/github/repos/batch-archive', async (req, res) => {
         r.archived = archived;
       }
     });
+    for (const r of repos) {
+      stmts.updateRepoArchived.run(archived ? 1 : 0, new Date().toISOString(), userId, r.owner, r.repo);
+    }
     return res.json({
       success: true,
       updated: repos.length,
@@ -399,6 +482,7 @@ reposRouter.post('/api/github/repos/batch-archive', async (req, res) => {
         body: JSON.stringify({ archived }),
       });
       if (status === 200) {
+        stmts.updateRepoArchived.run(archived ? 1 : 0, new Date().toISOString(), userId, owner, repo);
         results.push({ owner, repo, success: true });
       } else {
         results.push({ owner, repo, success: false, error: data?.message || `Status ${status}` });

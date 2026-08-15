@@ -11,6 +11,7 @@ import { branchesRouter } from './server/routes/branches.js';
 import { releasesRouter } from './server/routes/releases.js';
 import { issuesRouter } from './server/routes/issues.js';
 import { starredRouter } from './server/routes/starred.js';
+import { searchRouter } from './server/routes/search.js';
 
 dotenv.config();
 
@@ -44,6 +45,7 @@ app.use(branchesRouter);
 app.use(releasesRouter);
 app.use(issuesRouter);
 app.use(starredRouter);
+app.use(searchRouter);
 
 // Server Lifecycle & Vite Middleware
 async function startServer() {

@@ -62,6 +62,16 @@ export interface GitHubRepo {
   topics: string[];
   parent?: GitHubRepoSummary;
   source?: GitHubRepoSummary;
+  languages?: Record<string, number>;
+  behind_by?: number;
+  ahead_by?: number;
+  drift_status?: string;
+  _matchType?: 'fts5' | 'semantic' | 'hybrid';
+  _rrfScore?: number;
+  _similarity?: number;
+  _score?: number;
+  _ftsRank?: number;
+  _vecRank?: number;
 }
 
 export type ActivityLevel = 'active' | 'warm' | 'cool' | 'stale' | 'dormant';
@@ -217,9 +227,21 @@ export interface AuthSession {
 
 export interface FilterOptions {
   search: string;
+  searchMode?: 'hybrid' | 'fts' | 'semantic';
   visibility: 'all' | 'public' | 'private';
   type: 'all' | 'owned' | 'forked' | 'archived';
   activity: 'all' | ActivityLevel;
   language: string;
-  sort: 'pushed_desc' | 'pushed_asc' | 'created_desc' | 'created_asc' | 'stars_desc' | 'name_asc' | 'size_desc';
+  sort: 
+    | 'pushed_desc' 
+    | 'pushed_asc' 
+    | 'created_desc' 
+    | 'created_asc' 
+    | 'stars_desc' 
+    | 'stars_asc'
+    | 'name_asc' 
+    | 'name_desc'
+    | 'size_desc'
+    | 'size_asc'
+    | 'forks_desc';
 }
