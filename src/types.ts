@@ -76,6 +76,17 @@ export interface GitHubRepo {
 
 export type ActivityLevel = 'active' | 'warm' | 'cool' | 'stale' | 'dormant';
 
+export type AuditPresetId = 'standard' | 'aggressive' | 'moderate' | 'relaxed' | 'custom';
+
+export interface AuditThresholdsConfig {
+  presetId: AuditPresetId;
+  activeDays: number;     // e.g. 30 days
+  warmMonths: number;     // e.g. 4 months
+  staleMonths: number;    // e.g. 12 months (1 yr)
+  dormantMonths: number;  // e.g. 24 months (2 yrs)
+  dateField: 'pushed_at' | 'updated_at';
+}
+
 export interface ForkSyncStatus {
   parent_full_name: string;
   parent_branch: string;

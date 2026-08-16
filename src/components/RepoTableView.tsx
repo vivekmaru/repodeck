@@ -23,7 +23,7 @@ import {
   ArrowDown,
   ArrowUpDown
 } from 'lucide-react';
-import { GitHubRepo, RepoDetailsData, ForkSyncStatus, FilterOptions } from '../types';
+import { GitHubRepo, RepoDetailsData, ForkSyncStatus, FilterOptions, AuditThresholdsConfig } from '../types';
 import { formatAge, formatRelativeTime, getActivityLevel, formatRepoSize, getLanguageColor } from '../utils/github';
 import { api } from '../services/api';
 
@@ -41,6 +41,7 @@ interface RepoTableViewProps {
   onOpenDrawer?: (repo: GitHubRepo) => void;
   currentSort?: FilterOptions['sort'];
   onSortChange?: (sort: FilterOptions['sort']) => void;
+  auditConfig?: AuditThresholdsConfig;
 }
 
 // Inline Expanded Row Details Component
@@ -251,6 +252,7 @@ export function RepoTableView({
   onOpenDrawer,
   currentSort = 'pushed_desc',
   onSortChange,
+  auditConfig,
 }: RepoTableViewProps) {
   const [expandedRepoId, setExpandedRepoId] = useState<number | null>(null);
   const [highlightedIndex, setHighlightedIndex] = useState<number | null>(repos.length > 0 ? 0 : null);
@@ -479,7 +481,7 @@ export function RepoTableView({
               const forkStatus = forkSyncStatuses?.[repo.id];
               const isInSync = forkStatus?.status === 'up_to_date' || (forkStatus && forkStatus.behind_by === 0);
               const age = formatAge(repo.created_at);
-              const activity = getActivityLevel(repo.pushed_at, repo.created_at);
+              const activity = getActivityLevel(repo.pushed_at, repo.created_at, auditConfig, repo.updated_at);
               const langColor = getLanguageColor(repo.language);
               const activityStyle = activityTagStyles[activity.level] || 'bg-neutral-100 dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200 border-[#1a1a1a]';
 
@@ -694,13 +696,13 @@ export function RepoTableView({
                       <div className="flex items-center justify-end gap-2.5 text-[#1a1a1a] dark:text-[#f0f6fc] font-bold">
                         <span title="Stars" className="flex items-center gap-1">
                           <Star className="w-3.5 h-3.5 fill-[#ffcc5c] text-[#1a1a1a] dark:text-[#ffcc5c] stroke-[2]" />
-                          <span>{repo.stargazers_count}</span>
+                          <span className="font-mono tabular-nums">{repo.stargazers_count}</span>
                         </span>
                         <span title="Forks" className="flex items-center gap-1">
                           <GitFork className="w-3.5 h-3.5 stroke-[2.5]" />
-                          <span>{repo.forks_count}</span>
+                          <span className="font-mono tabular-nums">{repo.forks_count}</span>
                         </span>
-                        <span title="Disk size" className="text-[#666] dark:text-[#8b949e] font-medium">
+                        <span title="Disk size" className="text-[#666] dark:text-[#8b949e] font-medium font-mono tabular-nums">
                           {formatRepoSize(repo.size)}
                         </span>
                       </div>

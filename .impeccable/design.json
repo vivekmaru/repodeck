@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-16T00:00:00.000Z",
+  "title": "Design System: RepoDeck",
+  "extensions": {
+    "colorMeta": {
+      "primary": { "role": "primary", "displayName": "Terminal Green", "canonical": "#39d353", "tonalRamp": ["#08240f", "#0f3818", "#175225", "#216e34", "#2ea043", "#39d353", "#56e36f", "#8af39f"] },
+      "accent-blue": { "role": "secondary", "displayName": "Electric Blue", "canonical": "#58a6ff", "tonalRamp": ["#0c2d6b", "#114299", "#1f6feb", "#388bfd", "#58a6ff", "#79c0ff", "#a5d6ff", "#cae8ff"] },
+      "accent-coral": { "role": "secondary", "displayName": "Signal Coral", "canonical": "#ff7b72", "tonalRamp": ["#490202", "#67060c", "#8e1519", "#b62324", "#da3633", "#f85149", "#ff7b72", "#ffa198"] },
+      "accent-purple": { "role": "tertiary", "displayName": "Neural Purple", "canonical": "#bc8cff", "tonalRamp": ["#271052", "#3c1e70", "#553098", "#7048c6", "#8957e5", "#a371f7", "#bc8cff", "#d2a8ff"] },
+      "neutral-bg-dark": { "role": "neutral", "displayName": "Deck Dark Background", "canonical": "#0d1117", "tonalRamp": ["#010409", "#0d1117", "#161b22", "#21262d", "#30363d", "#484f58", "#6e7681", "#8b949e"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display (Plus Jakarta Sans)", "purpose": "App branding logo and modal banners." },
+      "label": { "displayName": "Label (Space Mono)", "purpose": "Tabular metrics, commit hashes, latency pills." }
+    },
+    "shadows": [
+      { "name": "neo-hard", "value": "2px 2px 0px #1a1a1a", "purpose": "Tactile neo-brutalist cards in light mode." },
+      { "name": "deck-overlay", "value": "0 4px 20px rgba(0, 0, 0, 0.4)", "purpose": "Modal dialogs and slide-over drawers." }
+    ],
+    "motion": [
+      { "name": "ease-out-snappy", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Drawer and modal entrance transitions." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" },
+      { "name": "2xl", "value": "1536px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Terminal Button Primary",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Primary action button for synchronization and confirmations.",
+      "html": "<button class=\"ds-btn-primary\">SYNC UPSTREAM</button>",
+      "css": ".ds-btn-primary { background: #39d353; color: #0d1117; font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; padding: 6px 14px; border: 1px solid #2ea043; border-radius: 6px; cursor: pointer; transition: all 0.15s ease; } .ds-btn-primary:hover { background: #58a6ff; border-color: #388bfd; }"
+    },
+    {
+      "name": "Telemetry Pill",
+      "kind": "chip",
+      "refersTo": "chip-telemetry",
+      "description": "Status badge for drift, search engine latency, and repository lifecycle.",
+      "html": "<span class=\"ds-chip-telemetry\">⚡ 0.8ms</span>",
+      "css": ".ds-chip-telemetry { display: inline-flex; align-items: center; background: #21262d; color: #58a6ff; font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 600; padding: 2px 8px; border: 1px solid #30363d; border-radius: 9999px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Terminal Deck",
+    "overview": "RepoDeck is engineered as a high-density, tactile developer cockpit. It rejects decorative SaaS fluff in favor of razor-sharp data presentation, sub-millisecond tactile feedback, and seamless dual-world theming.",
+    "keyCharacteristics": [
+      "Zero-Latency Telemetry",
+      "Dual Visual Worlds (Dark & Warm Light)",
+      "Tabular Precision with Space Mono"
+    ],
+    "rules": [
+      { "name": "The Color-as-Data Rule", "body": "Color is never applied merely for decoration. Every hue communicates explicit semantic state.", "section": "colors" },
+      { "name": "The Monospace-for-Numbers Rule", "body": "All numeric counters must render in Space Mono or tabular-nums.", "section": "typography" },
+      { "name": "The Flat-By-Default Rule", "body": "Surfaces remain flat and tonal at rest.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do maintain tabular monospace alignment for all numbers and dates.",
+      "Do keep table row heights compact (52px) for maximum visible information density.",
+      "Do provide instant keyboard shortcuts for navigation and search."
+    ],
+    "donts": [
+      "Don't add soft, blurry gradient drop-shadows that degrade technical scanability.",
+      "Don't use slow animations; all transitions must complete in under 150ms.",
+      "Don't hide critical repository metrics behind extra clicks."
+    ]
+  }
+}

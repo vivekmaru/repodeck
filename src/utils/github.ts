@@ -1,4 +1,93 @@
-import { ActivityLevel } from '../types';
+import { ActivityLevel, AuditPresetId, AuditThresholdsConfig } from '../types';
+
+export const AUDIT_PRESETS: Record<AuditPresetId, {
+  name: string;
+  badge: string;
+  description: string;
+  config: Omit<AuditThresholdsConfig, 'presetId'>;
+}> = {
+  standard: {
+    name: 'Standard (1y / 2y)',
+    badge: '1y / 2y',
+    description: 'Stale after 1 year, dormant after 2 years. Best for general development.',
+    config: {
+      activeDays: 30,
+      warmMonths: 4,
+      staleMonths: 12,
+      dormantMonths: 24,
+      dateField: 'pushed_at',
+    },
+  },
+  aggressive: {
+    name: 'Aggressive (3m / 6m)',
+    badge: '3m / 6m',
+    description: 'Stale after 3 months, dormant after 6 months. High hygiene for active repos.',
+    config: {
+      activeDays: 14,
+      warmMonths: 2,
+      staleMonths: 3,
+      dormantMonths: 6,
+      dateField: 'pushed_at',
+    },
+  },
+  moderate: {
+    name: 'Moderate (6m / 1y)',
+    badge: '6m / 1y',
+    description: 'Stale after 6 months, dormant after 1 year. Balanced periodic cleanup.',
+    config: {
+      activeDays: 30,
+      warmMonths: 3,
+      staleMonths: 6,
+      dormantMonths: 12,
+      dateField: 'pushed_at',
+    },
+  },
+  relaxed: {
+    name: 'Relaxed (2y / 3y)',
+    badge: '2y / 3y',
+    description: 'Stale after 2 years, dormant after 3 years. For legacy & archival portfolios.',
+    config: {
+      activeDays: 60,
+      warmMonths: 6,
+      staleMonths: 24,
+      dormantMonths: 36,
+      dateField: 'pushed_at',
+    },
+  },
+  custom: {
+    name: 'Custom Period',
+    badge: 'Custom',
+    description: 'Customized stale and dormant inactivity cutoffs.',
+    config: {
+      activeDays: 30,
+      warmMonths: 4,
+      staleMonths: 12,
+      dormantMonths: 24,
+      dateField: 'pushed_at',
+    },
+  },
+};
+
+export const DEFAULT_AUDIT_CONFIG: AuditThresholdsConfig = {
+  presetId: 'standard',
+  activeDays: 30,
+  warmMonths: 4,
+  staleMonths: 12,
+  dormantMonths: 24,
+  dateField: 'pushed_at',
+};
+
+export function formatThresholdLabel(months: number): string {
+  if (months < 1) {
+    const days = Math.round(months * 30.4);
+    return `${days}d`;
+  }
+  if (months < 12) {
+    return `${months}m`;
+  }
+  const years = months / 12;
+  return years % 1 === 0 ? `${years}y` : `${years.toFixed(1)}y`;
+}
 
 export function formatRelativeTime(dateString: string): string {
   if (!dateString) return 'Never';
@@ -45,59 +134,73 @@ export function formatAge(createdAt: string): { label: string; days: number; yea
   return { label: `${years} yr${years === 1 ? '' : 's'} old`, days, years };
 }
 
-export function getActivityLevel(pushedAt: string | null, createdAt: string): {
+export function getActivityLevel(
+  pushedAt: string | null,
+  createdAt: string,
+  config: AuditThresholdsConfig = DEFAULT_AUDIT_CONFIG,
+  updatedAt?: string | null
+): {
   level: ActivityLevel;
   label: string;
   badgeClass: string;
   dotClass: string;
   description: string;
 } {
-  const targetDate = pushedAt ? new Date(pushedAt) : new Date(createdAt);
+  const chosenDateStr = (config.dateField === 'updated_at' && updatedAt) ? updatedAt : pushedAt;
+  const targetDate = chosenDateStr ? new Date(chosenDateStr) : new Date(createdAt);
   const now = new Date();
-  const diffDays = Math.floor((now.getTime() - targetDate.getTime()) / (1000 * 60 * 60 * 24));
+  const diffDays = Math.max(0, Math.floor((now.getTime() - targetDate.getTime()) / (1000 * 60 * 60 * 24)));
 
-  if (diffDays <= 30) {
+  const activeDaysCutoff = config.activeDays || 30;
+  const warmDaysCutoff = (config.warmMonths || 4) * 30.4;
+  const staleDaysCutoff = (config.staleMonths || 12) * 30.4;
+  const dormantDaysCutoff = (config.dormantMonths || 24) * 30.4;
+
+  const staleLabel = formatThresholdLabel(config.staleMonths || 12);
+  const dormantLabel = formatThresholdLabel(config.dormantMonths || 24);
+
+  if (diffDays <= activeDaysCutoff) {
     return {
       level: 'active',
       label: 'Active',
       badgeClass: 'bg-emerald-950/60 text-emerald-300 border-emerald-800/80',
       dotClass: 'bg-emerald-400',
-      description: 'Pushed within the last 30 days',
+      description: `Active within the last ${activeDaysCutoff} days`,
     };
   }
-  if (diffDays <= 120) {
+  if (diffDays <= warmDaysCutoff) {
     return {
       level: 'warm',
       label: 'Recent',
       badgeClass: 'bg-sky-950/60 text-sky-300 border-sky-800/80',
       dotClass: 'bg-sky-400',
-      description: 'Pushed within the last 4 months',
+      description: `Active within the last ${formatThresholdLabel(config.warmMonths || 4)}`,
     };
   }
-  if (diffDays <= 365) {
+  if (diffDays <= staleDaysCutoff) {
     return {
       level: 'cool',
       label: 'Quiet',
       badgeClass: 'bg-amber-950/60 text-amber-300 border-amber-800/80',
       dotClass: 'bg-amber-400',
-      description: 'Pushed within the last year',
+      description: `Activity within the last ${staleLabel}`,
     };
   }
-  if (diffDays <= 730) {
+  if (diffDays <= dormantDaysCutoff) {
     return {
       level: 'stale',
-      label: 'Stale (>1y)',
+      label: `Stale (>${staleLabel})`,
       badgeClass: 'bg-orange-950/60 text-orange-300 border-orange-800/80',
       dotClass: 'bg-orange-400',
-      description: 'No commits in over 1 year (Cleanup candidate)',
+      description: `No activity in over ${staleLabel} (Cleanup candidate)`,
     };
   }
   return {
     level: 'dormant',
-    label: 'Dormant (>2y)',
+    label: `Dormant (>${dormantLabel})`,
     badgeClass: 'bg-rose-950/60 text-rose-300 border-rose-800/80',
     dotClass: 'bg-rose-400',
-    description: 'No commits in over 2 years (Prime delete candidate)',
+    description: `No activity in over ${dormantLabel} (Prime delete candidate)`,
   };
 }
 

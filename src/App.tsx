@@ -25,7 +25,8 @@ import {
   AuthSession, 
   FilterOptions,
   ForkSyncStatus,
-  ThemeMode
+  ThemeMode,
+  AuditThresholdsConfig
 } from './types';
 import { Navbar } from './components/Navbar';
 import { FilterBar } from './components/FilterBar';
@@ -40,7 +41,7 @@ import { BatchDeleteModal } from './components/BatchDeleteModal';
 import { RepoDetailDrawer } from './components/RepoDetailDrawer';
 import { AuthModal } from './components/AuthModal';
 import { ToastContainer, ToastMessage } from './components/Toast';
-import { getActivityLevel } from './utils/github';
+import { getActivityLevel, DEFAULT_AUDIT_CONFIG } from './utils/github';
 import { api } from './services/api';
 
 export default function App() {
@@ -53,6 +54,38 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'repos' | 'forks' | 'starred' | 'audit'>('repos');
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
   const [authModalOpen, setAuthModalOpen] = useState(false);
+
+  // Audit Thresholds & Lifecycle Configuration State with LocalStorage Persistence
+  const [auditConfig, setAuditConfig] = useState<AuditThresholdsConfig>(() => {
+    try {
+      const saved = localStorage.getItem('repodeck_audit_config');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed.staleMonths === 'number' && typeof parsed.dormantMonths === 'number') {
+          return {
+            presetId: parsed.presetId || 'custom',
+            activeDays: parsed.activeDays || 30,
+            warmMonths: parsed.warmMonths || 4,
+            staleMonths: parsed.staleMonths || 12,
+            dormantMonths: parsed.dormantMonths || 24,
+            dateField: parsed.dateField || 'pushed_at',
+          };
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load saved audit config', e);
+    }
+    return DEFAULT_AUDIT_CONFIG;
+  });
+
+  const handleAuditConfigChange = (newConfig: AuditThresholdsConfig) => {
+    setAuditConfig(newConfig);
+    try {
+      localStorage.setItem('repodeck_audit_config', JSON.stringify(newConfig));
+    } catch (e) {
+      console.error('Failed to persist audit config', e);
+    }
+  };
 
   // Theme state
   const [theme, setTheme] = useState<ThemeMode>(() => {
@@ -506,10 +539,10 @@ export default function App() {
   const staleCandidates = useMemo(
     () =>
       repos.filter((r) => {
-        const act = getActivityLevel(r.pushed_at, r.created_at);
+        const act = getActivityLevel(r.pushed_at, r.created_at, auditConfig, r.updated_at);
         return act.level === 'stale' || act.level === 'dormant';
       }),
-    [repos]
+    [repos, auditConfig]
   );
 
   const availableLanguages = useMemo(() => {
@@ -551,7 +584,7 @@ export default function App() {
 
         // Activity Level
         if (filters.activity !== 'all') {
-          const act = getActivityLevel(repo.pushed_at, repo.created_at);
+          const act = getActivityLevel(repo.pushed_at, repo.created_at, auditConfig, repo.updated_at);
           if (act.level !== filters.activity) return false;
         }
 
@@ -663,6 +696,7 @@ export default function App() {
               searchLatency={searchLatency}
               onReindexEmbeddings={handleReindexEmbeddings}
               isReindexing={isReindexing}
+              auditConfig={auditConfig}
             />
 
             {/* Repository List / Table / Grid */}
@@ -696,6 +730,7 @@ export default function App() {
                 onOpenDrawer={(r) => setDrawerRepo(r)}
                 currentSort={filters.sort}
                 onSortChange={(newSort) => setFilters((prev) => ({ ...prev, sort: newSort }))}
+                auditConfig={auditConfig}
               />
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -718,6 +753,7 @@ export default function App() {
                     forkSyncStatus={forkSyncStatuses[repo.id]}
                     isSyncing={syncingForkIds.has(repo.id)}
                     onOpenDrawer={(r) => setDrawerRepo(r)}
+                    auditConfig={auditConfig}
                   />
                 ))}
               </div>
@@ -749,6 +785,8 @@ export default function App() {
         {activeTab === 'audit' && (
           <AuditView
             repos={repos}
+            config={auditConfig}
+            onConfigChange={handleAuditConfigChange}
             onDeleteClick={(r) => setRepoToDelete(r)}
             onArchiveToggle={handleArchiveToggle}
           />
@@ -777,6 +815,7 @@ export default function App() {
         onSyncClick={(r) => {
           setActiveTab('forks');
         }}
+        auditConfig={auditConfig}
       />
 
       {/* Single Repo Delete Confirmation Modal */}

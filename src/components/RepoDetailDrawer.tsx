@@ -37,7 +37,8 @@ import {
   RepoDetailsData, 
   BranchInfo, 
   RepoReleasesData, 
-  IssueOrPrInfo 
+  IssueOrPrInfo,
+  AuditThresholdsConfig 
 } from '../types';
 import { 
   formatAge, 
@@ -55,6 +56,7 @@ interface RepoDetailDrawerProps {
   onDeleteClick?: (repo: GitHubRepo) => void;
   onArchiveToggle?: (repo: GitHubRepo, newArchivedState: boolean) => Promise<void>;
   onSyncClick?: (repo: GitHubRepo) => void;
+  auditConfig?: AuditThresholdsConfig;
 }
 
 export function RepoDetailDrawer({
@@ -64,6 +66,7 @@ export function RepoDetailDrawer({
   onDeleteClick,
   onArchiveToggle,
   onSyncClick,
+  auditConfig,
 }: RepoDetailDrawerProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'branches' | 'releases' | 'triage' | 'languages' | 'contributors' | 'commits'>('overview');
   
@@ -75,19 +78,52 @@ export function RepoDetailDrawer({
   // Branches data
   const [branches, setBranches] = useState<BranchInfo[] | null>(null);
   const [branchesLoading, setBranchesLoading] = useState(false);
+  const [branchesError, setBranchesError] = useState<string | null>(null);
   const [branchActionLoading, setBranchActionLoading] = useState<string | null>(null);
   const [pruneMergedLoading, setPruneMergedLoading] = useState(false);
 
   // Releases data
   const [releasesData, setReleasesData] = useState<RepoReleasesData | null>(null);
   const [releasesLoading, setReleasesLoading] = useState(false);
+  const [releasesError, setReleasesError] = useState<string | null>(null);
 
   // Triage (Issues & PRs) data
   const [issuesData, setIssuesData] = useState<IssueOrPrInfo[] | null>(null);
   const [issuesLoading, setIssuesLoading] = useState(false);
+  const [issuesError, setIssuesError] = useState<string | null>(null);
   const [triageFilter, setTriageFilter] = useState<'all' | 'prs' | 'issues'>('all');
 
   const [copiedClone, setCopiedClone] = useState(false);
+
+  const fetchBranches = () => {
+    if (!repo) return;
+    setBranchesLoading(true);
+    setBranchesError(null);
+    api.branches.getBranches(repo.owner.login, repo.name)
+      .then((b) => setBranches(b))
+      .catch((err: any) => setBranchesError(err?.message || 'Failed to audit repository branches from GitHub.'))
+      .finally(() => setBranchesLoading(false));
+  };
+
+  const fetchReleases = () => {
+    if (!repo) return;
+    setReleasesLoading(true);
+    setReleasesError(null);
+    api.releases.getReleases(repo.owner.login, repo.name)
+      .then((r) => setReleasesData(r))
+      .catch((err: any) => setReleasesError(err?.message || 'Failed to retrieve releases and tags from GitHub.'))
+      .finally(() => setReleasesLoading(false));
+  };
+
+  const fetchIssues = () => {
+    if (!repo) return;
+    setIssuesLoading(true);
+    setIssuesError(null);
+    api.issues.getIssuesAndPrs(repo.owner.login, repo.name)
+      .then((i) => setIssuesData(i))
+      .catch((err: any) => setIssuesError(err?.message || 'Failed to retrieve open issues and pull requests from GitHub.'))
+      .finally(() => setIssuesLoading(false));
+  };
 
   // Fetch initial details and tab data
   useEffect(() => {
@@ -117,54 +153,27 @@ export function RepoDetailDrawer({
   useEffect(() => {
     if (!isOpen || !repo) return;
 
-    let isMounted = true;
-
-    if (activeTab === 'branches' && !branches) {
-      setBranchesLoading(true);
-      api.branches.getBranches(repo.owner.login, repo.name)
-        .then((b) => {
-          if (isMounted) setBranches(b);
-        })
-        .catch(() => {})
-        .finally(() => {
-          if (isMounted) setBranchesLoading(false);
-        });
+    if (activeTab === 'branches' && !branches && !branchesLoading && !branchesError) {
+      fetchBranches();
     }
 
-    if (activeTab === 'releases' && !releasesData) {
-      setReleasesLoading(true);
-      api.releases.getReleases(repo.owner.login, repo.name)
-        .then((r) => {
-          if (isMounted) setReleasesData(r);
-        })
-        .catch(() => {})
-        .finally(() => {
-          if (isMounted) setReleasesLoading(false);
-        });
+    if (activeTab === 'releases' && !releasesData && !releasesLoading && !releasesError) {
+      fetchReleases();
     }
 
-    if (activeTab === 'triage' && !issuesData) {
-      setIssuesLoading(true);
-      api.issues.getIssuesAndPrs(repo.owner.login, repo.name)
-        .then((i) => {
-          if (isMounted) setIssuesData(i);
-        })
-        .catch(() => {})
-        .finally(() => {
-          if (isMounted) setIssuesLoading(false);
-        });
+    if (activeTab === 'triage' && !issuesData && !issuesLoading && !issuesError) {
+      fetchIssues();
     }
-
-    return () => {
-      isMounted = false;
-    };
   }, [isOpen, repo, activeTab, branches, releasesData, issuesData]);
 
   // Reset tab cache when repo changes
   useEffect(() => {
     setBranches(null);
+    setBranchesError(null);
     setReleasesData(null);
+    setReleasesError(null);
     setIssuesData(null);
+    setIssuesError(null);
     setActiveTab('overview');
   }, [repo?.full_name]);
 
@@ -181,7 +190,7 @@ export function RepoDetailDrawer({
 
   if (!repo) return null;
 
-  const activity = getActivityLevel(repo.pushed_at, repo.created_at);
+  const activity = getActivityLevel(repo.pushed_at, repo.created_at, auditConfig, repo.updated_at);
   const age = formatAge(repo.created_at);
   const cloneUrl = `https://github.com/${repo.full_name}.git`;
 
@@ -504,6 +513,25 @@ export function RepoDetailDrawer({
                     </div>
                   )}
 
+                  {branchesError && !branchesLoading && (
+                    <div className="p-5 rounded-2xl bg-[#fff5f5] dark:bg-[#321c1f] border-2 border-[#ff6b6b] dark:border-[#f85149] shadow-[3px_3px_0_#1a1a1a] text-center space-y-3">
+                      <div className="flex items-center justify-center gap-2 text-xs font-space font-bold text-[#d1242f] dark:text-[#ff7b72]">
+                        <AlertCircle className="w-4 h-4" />
+                        <span>Branch Telemetry Query Failed</span>
+                      </div>
+                      <p className="text-xs text-[#666] dark:text-[#8b949e] font-medium max-w-md mx-auto">
+                        {branchesError}
+                      </p>
+                      <button
+                        onClick={fetchBranches}
+                        className="px-3 py-1.5 rounded-xl bg-white dark:bg-[#161b22] hover:bg-[#ff6b6b] hover:text-white border-2 border-[#1a1a1a] dark:border-[#30363d] text-xs font-bold text-[#1a1a1a] dark:text-[#f0f6fc] shadow-[2px_2px_0_#1a1a1a] inline-flex items-center gap-1.5 cursor-pointer transition active:translate-x-0.5 active:translate-y-0.5"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Retry Fetch</span>
+                      </button>
+                    </div>
+                  )}
+
                   {/* Branches List */}
                   <div className="space-y-2.5">
                     {branches?.map((b) => (
@@ -575,6 +603,25 @@ export function RepoDetailDrawer({
                     </div>
                   )}
 
+                  {releasesError && !releasesLoading && (
+                    <div className="p-5 rounded-2xl bg-[#fff5f5] dark:bg-[#321c1f] border-2 border-[#ff6b6b] dark:border-[#f85149] shadow-[3px_3px_0_#1a1a1a] text-center space-y-3">
+                      <div className="flex items-center justify-center gap-2 text-xs font-space font-bold text-[#d1242f] dark:text-[#ff7b72]">
+                        <AlertCircle className="w-4 h-4" />
+                        <span>Failed to Load Releases & Tags</span>
+                      </div>
+                      <p className="text-xs text-[#666] dark:text-[#8b949e] font-medium max-w-md mx-auto">
+                        {releasesError}
+                      </p>
+                      <button
+                        onClick={fetchReleases}
+                        className="px-3 py-1.5 rounded-xl bg-white dark:bg-[#161b22] hover:bg-[#ff6b6b] hover:text-white border-2 border-[#1a1a1a] dark:border-[#30363d] text-xs font-bold text-[#1a1a1a] dark:text-[#f0f6fc] shadow-[2px_2px_0_#1a1a1a] inline-flex items-center gap-1.5 cursor-pointer transition active:translate-x-0.5 active:translate-y-0.5"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Retry Fetch</span>
+                      </button>
+                    </div>
+                  )}
+
                   {/* Releases Roster */}
                   {releasesData?.releases && releasesData.releases.length > 0 ? (
                     <div className="space-y-4">
@@ -639,7 +686,7 @@ export function RepoDetailDrawer({
                       ))}
                     </div>
                   ) : (
-                    !releasesLoading && (
+                    !releasesLoading && !releasesError && (
                       <div className="p-8 text-center text-xs font-space font-bold text-[#666] dark:text-[#8b949e] bg-white dark:bg-[#21262d] rounded-2xl border-2 border-[#1a1a1a] dark:border-[#30363d]">
                         No formal releases published for this repository yet.
                       </div>
@@ -692,6 +739,25 @@ export function RepoDetailDrawer({
                     <div className="p-8 text-center text-xs font-space font-bold text-[#666] dark:text-[#8b949e]">
                       <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-[#4ecdc4]" />
                       Fetching open issues and pull requests...
+                    </div>
+                  )}
+
+                  {issuesError && !issuesLoading && (
+                    <div className="p-5 rounded-2xl bg-[#fff5f5] dark:bg-[#321c1f] border-2 border-[#ff6b6b] dark:border-[#f85149] shadow-[3px_3px_0_#1a1a1a] text-center space-y-3">
+                      <div className="flex items-center justify-center gap-2 text-xs font-space font-bold text-[#d1242f] dark:text-[#ff7b72]">
+                        <AlertCircle className="w-4 h-4" />
+                        <span>Failed to Retrieve Issues & PRs</span>
+                      </div>
+                      <p className="text-xs text-[#666] dark:text-[#8b949e] font-medium max-w-md mx-auto">
+                        {issuesError}
+                      </p>
+                      <button
+                        onClick={fetchIssues}
+                        className="px-3 py-1.5 rounded-xl bg-white dark:bg-[#161b22] hover:bg-[#ff6b6b] hover:text-white border-2 border-[#1a1a1a] dark:border-[#30363d] text-xs font-bold text-[#1a1a1a] dark:text-[#f0f6fc] shadow-[2px_2px_0_#1a1a1a] inline-flex items-center gap-1.5 cursor-pointer transition active:translate-x-0.5 active:translate-y-0.5"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Retry Fetch</span>
+                      </button>
                     </div>
                   )}
 
@@ -750,7 +816,7 @@ export function RepoDetailDrawer({
                       </a>
                     ))}
 
-                    {filteredIssues.length === 0 && !issuesLoading && (
+                    {filteredIssues.length === 0 && !issuesLoading && !issuesError && (
                       <div className="p-8 text-center text-xs font-space font-bold text-[#666] dark:text-[#8b949e] bg-white dark:bg-[#21262d] rounded-2xl border-2 border-[#1a1a1a] dark:border-[#30363d]">
                         No matching open issues or pull requests.
                       </div>

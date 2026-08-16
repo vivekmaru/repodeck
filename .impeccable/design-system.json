@@ -1,0 +1,97 @@
+{
+  "name": "RepoDeck Design System",
+  "version": "1.0.0",
+  "archetype": "Neo-Brutalist Technical Data Console & GitHub Developer Hub",
+  "principles": [
+    "High Data Density with Zero Visual Noise",
+    "Instant Visual Feedback & Sub-Millisecond Feel",
+    "Dual Aesthetic Harmony (Warm Editorial Light & GitHub Pro Dark)",
+    "Engineered Keyboard-First Navigation",
+    "Accessible Color Contrast & Clear Visual Hierarchy"
+  ],
+  "typography": {
+    "fonts": {
+      "heading": "Plus Jakarta Sans, sans-serif",
+      "sans": "Inter, sans-serif",
+      "mono": "Space Mono, monospace"
+    },
+    "scale": {
+      "xs": { "size": "0.75rem", "lineHeight": "1rem", "usage": "Micro badges, telemetry pills, git hashes" },
+      "sm": { "size": "0.8125rem", "lineHeight": "1.125rem", "usage": "Table cell text, secondary labels, filter selects" },
+      "base": { "size": "0.875rem", "lineHeight": "1.25rem", "usage": "Body content, repo names, button labels" },
+      "md": { "size": "1rem", "lineHeight": "1.5rem", "usage": "Card titles, drawer section headings" },
+      "lg": { "size": "1.125rem", "lineHeight": "1.75rem", "usage": "Drawer header, modal titles" },
+      "xl": { "size": "1.25rem", "lineHeight": "1.75rem", "usage": "Page headers, banner hero text" },
+      "2xl": { "size": "1.5rem", "lineHeight": "2rem", "usage": "App branding logo" }
+    }
+  },
+  "colors": {
+    "dark": {
+      "background": "#0d1117",
+      "surface": "#161b22",
+      "surfaceElevated": "#21262d",
+      "border": "#30363d",
+      "borderSubtle": "rgba(255, 255, 255, 0.08)",
+      "textPrimary": "#f0f6fc",
+      "textMuted": "#8b949e",
+      "accent": "#ff7b72",
+      "teal": "#39d353",
+      "yellow": "#f0883e",
+      "blue": "#58a6ff",
+      "purple": "#bc8cff"
+    },
+    "light": {
+      "background": "#fffef2",
+      "surface": "#ffffff",
+      "surfaceElevated": "#f6f8fa",
+      "border": "#1a1a1a",
+      "borderSubtle": "rgba(26, 26, 26, 0.08)",
+      "textPrimary": "#1a1a1a",
+      "textMuted": "#555555",
+      "accent": "#ff6b6b",
+      "teal": "#4ecdc4",
+      "yellow": "#ffcc5c",
+      "blue": "#0969da",
+      "purple": "#8250df"
+    },
+    "semantic": {
+      "active": { "dark": "#39d353", "light": "#2da44e", "label": "Active (<30d)" },
+      "recent": { "dark": "#58a6ff", "light": "#0969da", "label": "Recent (<4m)" },
+      "quiet": { "dark": "#d29922", "light": "#bf8700", "label": "Quiet (<1y)" },
+      "stale": { "dark": "#f0883e", "light": "#bc4c00", "label": "Stale (>1y)" },
+      "dormant": { "dark": "#ff7b72", "light": "#cf222e", "label": "Dormant (>2y)" },
+      "driftBehind": { "dark": "#ff7b72", "light": "#cf222e" },
+      "driftAhead": { "dark": "#58a6ff", "light": "#0969da" },
+      "driftSynced": { "dark": "#39d353", "light": "#2da44e" }
+    }
+  },
+  "layout": {
+    "containerMaxWidth": "1840px",
+    "density": "high",
+    "viewModes": ["table", "grid"],
+    "filterBar": "2-tier sticky layout (Search + Engine selector top, Multi-select filters bottom)",
+    "drawer": "Right slide-over inspector (480px width, animated with Motion)"
+  },
+  "components": {
+    "Navbar": {
+      "height": "60px",
+      "elements": ["Logo", "Segmented Tabs (1-4)", "Theme Toggle", "Sync Status", "User Pill"]
+    },
+    "FilterBar": {
+      "searchEngines": ["Hybrid (RRF)", "FTS5 (BM25)", "AI Match (Vector)"],
+      "filterDimensions": ["Source", "Visibility", "Activity", "Language", "Sort Order"]
+    },
+    "RepoTableView": {
+      "virtualized": true,
+      "rowHeight": 52,
+      "columns": ["Checkbox", "Repository", "Lifecycle", "Language", "Metrics", "Push Date", "Actions"]
+    },
+    "ForkManager": {
+      "telemetry": ["Behind", "Ahead", "Synced", "Drift Status"],
+      "actions": ["Sync Single", "Batch Sync", "View Commits"]
+    },
+    "AuditView": {
+      "sections": ["Disk Footprint Breakdown", "Reclaimable Space Calculator", "Stale Fork Analyzer", "Dormant Repositories"]
+    }
+  }
+}

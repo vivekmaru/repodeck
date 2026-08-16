@@ -10,3 +10,6 @@ coverage/
 *.db
 *.db-wal
 *.db-shm
+.agents/
+.impeccable/config.local.json
+.impeccable/live/

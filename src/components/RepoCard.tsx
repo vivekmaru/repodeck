@@ -9,7 +9,7 @@ import {
   Check,
   RefreshCw
 } from 'lucide-react';
-import { GitHubRepo, ForkSyncStatus } from '../types';
+import { GitHubRepo, ForkSyncStatus, AuditThresholdsConfig } from '../types';
 import { formatAge, formatRelativeTime, getActivityLevel, formatRepoSize, getLanguageColor } from '../utils/github';
 
 interface RepoCardProps {
@@ -23,6 +23,7 @@ interface RepoCardProps {
   forkSyncStatus?: ForkSyncStatus;
   isSyncing?: boolean;
   onOpenDrawer?: (repo: GitHubRepo) => void;
+  auditConfig?: AuditThresholdsConfig;
 }
 
 export function RepoCard({
@@ -36,9 +37,10 @@ export function RepoCard({
   forkSyncStatus,
   isSyncing,
   onOpenDrawer,
+  auditConfig,
 }: RepoCardProps) {
   const age = formatAge(repo.created_at);
-  const activity = getActivityLevel(repo.pushed_at, repo.created_at);
+  const activity = getActivityLevel(repo.pushed_at, repo.created_at, auditConfig, repo.updated_at);
   const langColor = getLanguageColor(repo.language);
   const isInSync = forkSyncStatus?.status === 'up_to_date' || (forkSyncStatus && forkSyncStatus.behind_by === 0);
 
@@ -194,13 +196,13 @@ export function RepoCard({
           <div className="flex items-center gap-3">
             <span className="flex items-center gap-1 font-bold text-[#1a1a1a] dark:text-[#f0f6fc]" title="Stars">
               <Star className="w-3.5 h-3.5 fill-[#ffcc5c] text-[#1a1a1a] dark:text-[#ffcc5c] stroke-[2]" />
-              <span>{repo.stargazers_count}</span>
+              <span className="font-mono tabular-nums">{repo.stargazers_count}</span>
             </span>
             <span className="flex items-center gap-1 font-bold text-[#1a1a1a] dark:text-[#f0f6fc]" title="Forks">
               <GitFork className="w-3.5 h-3.5 text-[#1a1a1a] dark:text-[#f0f6fc] stroke-[2.5]" />
-              <span>{repo.forks_count}</span>
+              <span className="font-mono tabular-nums">{repo.forks_count}</span>
             </span>
-            <span className="text-[#666] dark:text-[#8b949e]" title="Disk space">
+            <span className="text-[#666] dark:text-[#8b949e] font-mono tabular-nums" title="Disk space">
               {formatRepoSize(repo.size)}
             </span>
           </div>
